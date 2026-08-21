@@ -184,33 +184,28 @@ export function NinosView({
       if (!error && data && data.length > 0 && data[0].controls && data[0].controls.length > 0) {
         setControls(data[0].controls)
       } else {
-        const local = localStorage.getItem(`pediatric_${selectedChild!.id}`)
-        if (local) {
-          try {
-            const parsed = JSON.parse(local)
-            setControls(parsed.length > 0 ? parsed : [createEmptyChildControl()])
-          } catch {
-            setControls([createEmptyChildControl()])
-          }
-        } else {
-          setControls([createEmptyChildControl()])
-        }
+        if (error) console.error(error)
+        setControls([createEmptyChildControl()])
       }
     }
     loadData()
   }, [selectedChild])
 
-  const saveControls = (newControls: ChildControl[]) => {
-    setControls(newControls)
+  const saveControls = async (newControls: ChildControl[]) => {
+    setControls(newControls) // optimistic update
     if (selectedChild) {
-      localStorage.setItem(`pediatric_${selectedChild.id}`, JSON.stringify(newControls))
-      supabase.from("pediatric_records").upsert({
+      const { error } = await supabase.from("pediatric_records").upsert({
         id: `ped-${selectedChild.id}`,
         patient_id: selectedChild.id,
         patient_name: `${selectedChild.first_name} ${selectedChild.last_name}`,
         controls: newControls,
         updated_at: new Date().toISOString(),
-      })
+      }).select()
+      
+      if (error) {
+        console.error(error)
+        alert(error.message)
+      }
     }
   }
 

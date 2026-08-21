@@ -128,22 +128,15 @@ export function PatientRecord({
       if (!error && data) {
         setDocuments(data)
       } else {
-        const local = localStorage.getItem(`pdfs_${patient.id}`)
-        if (local) {
-          try {
-            setDocuments(JSON.parse(local))
-          } catch {
-            setDocuments([])
-          }
-        }
+        if (error) console.error(error)
+        setDocuments([])
       }
     }
     loadPdfs()
   }, [patient.id])
 
-  const saveLocalPdfs = (docs: PatientDocument[]) => {
+  const saveToStatePdfs = (docs: PatientDocument[]) => {
     setDocuments(docs)
-    localStorage.setItem(`pdfs_${patient.id}`, JSON.stringify(docs))
   }
 
   const handleUploadPdf = async (e: React.FormEvent) => {
@@ -151,10 +144,23 @@ export function PatientRecord({
     if (!docTitle || !docFile) return
     setLoadingPdf(true)
 
-    // Convert file to base64 for reliable instant preview and storage
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const fileUrl = reader.result as string
+    try {
+      const fileExt = docFile.name.split('.').pop()
+      const filePath = `${patient.id}/${Date.now()}.${fileExt}`
+
+      // 1. Subir a Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('clinical_documents')
+        .upload(filePath, docFile, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      // 2. Obtener la URL pública real HTTP
+      const { data: urlData } = supabase.storage
+        .from('clinical_documents')
+        .getPublicUrl(filePath)
+
+      const publicUrl = urlData.publicUrl
 
       const newDoc: PatientDocument = {
         id: `pdf-${Date.now()}`,
@@ -162,15 +168,18 @@ export function PatientRecord({
         title: docTitle,
         type: docType,
         file_name: docFile.name,
-        file_url: fileUrl,
+        file_url: publicUrl,
         created_at: new Date().toISOString(),
       }
 
-      const { error } = await supabase.from("patient_documents").insert([newDoc])
+      const { data, error } = await supabase.from("patient_documents").insert([newDoc]).select()
 
-      setLoadingPdf(false)
       if (error) {
-        saveLocalPdfs([newDoc, ...documents])
+        throw error
+      }
+      
+      if (data && data.length > 0) {
+        setDocuments([data[0], ...documents])
       } else {
         setDocuments([newDoc, ...documents])
       }
@@ -178,15 +187,24 @@ export function PatientRecord({
       setPdfDialogOpen(false)
       setDocTitle("")
       setDocFile(null)
+    } catch (error: any) {
+      console.error(error)
+      alert(error.message)
+    } finally {
+      setLoadingPdf(false)
     }
-    reader.readAsDataURL(docFile)
   }
 
   const handleDeletePdf = async (id: string) => {
     if (!confirm("¿Eliminar este documento PDF?")) return
+    const { error } = await supabase.from("patient_documents").delete().eq("id", id)
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      return
+    }
     const updated = documents.filter((d) => d.id !== id)
-    saveLocalPdfs(updated)
-    await supabase.from("patient_documents").delete().eq("id", id)
+    saveToStatePdfs(updated)
   }
 
   return (

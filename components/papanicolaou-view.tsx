@@ -197,31 +197,16 @@ export function PapanicolaouView({
   // Load records from Supabase and merge with localStorage
   useEffect(() => {
     async function loadData() {
-      const localStr = localStorage.getItem("papanicolaou_records")
-      let localRecs: PapanicolaouRecord[] = []
-      if (localStr) {
-        try { localRecs = JSON.parse(localStr) } catch {}
-      }
-
       const { data, error } = await supabase
         .from("papanicolaou_records")
         .select("*")
         .order("created_at", { ascending: false })
 
       if (!error && data) {
-        // Merge Supabase and LocalStorage records by ID
-        const map = new Map<string, PapanicolaouRecord>()
-        data.forEach((r: PapanicolaouRecord) => map.set(r.id, r))
-        localRecs.forEach((r: PapanicolaouRecord) => {
-          if (!map.has(r.id)) map.set(r.id, r)
-        })
-        const combined = Array.from(map.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        setRecords(combined)
-      } else if (localRecs.length > 0) {
-        setRecords(localRecs)
+        setRecords(data)
       } else {
-        setRecords(INITIAL_PP_MOCKS)
-        localStorage.setItem("papanicolaou_records", JSON.stringify(INITIAL_PP_MOCKS))
+        if (error) console.error(error)
+        setRecords([])
       }
     }
     loadData()
@@ -230,9 +215,8 @@ export function PapanicolaouView({
     return () => window.removeEventListener("papanicolaou_updated", loadData)
   }, [])
 
-  const saveToLocal = (newRecords: PapanicolaouRecord[]) => {
+  const saveToState = (newRecords: PapanicolaouRecord[]) => {
     setRecords(newRecords)
-    localStorage.setItem("papanicolaou_records", JSON.stringify(newRecords))
   }
 
   const handleAddRecord = async (e: React.FormEvent) => {
@@ -251,13 +235,17 @@ export function PapanicolaouView({
       created_at: new Date().toISOString(),
     }
 
-    const { error } = await supabase.from("papanicolaou_records").insert([newRec])
+    const { data, error } = await supabase.from("papanicolaou_records").insert([newRec]).select()
 
     setLoading(false)
     if (error) {
-      // Fallback local
-      const updated = [newRec, ...records]
-      saveToLocal(updated)
+      console.error(error)
+      alert(error.message)
+      return
+    }
+
+    if (data && data.length > 0) {
+      setRecords([data[0], ...records])
     } else {
       setRecords([newRec, ...records])
     }
@@ -270,16 +258,26 @@ export function PapanicolaouView({
   }
 
   const handleUpdateStatus = async (id: string, newStatus: "realizado" | "en proceso" | "entregado") => {
+    const { error } = await supabase.from("papanicolaou_records").update({ status: newStatus }).eq("id", id)
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      return
+    }
     const updated = records.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-    saveToLocal(updated)
-    await supabase.from("papanicolaou_records").update({ status: newStatus }).eq("id", id)
+    saveToState(updated)
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Está seguro de eliminar este registro de Papanicolaou?")) return
+    const { error } = await supabase.from("papanicolaou_records").delete().eq("id", id)
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      return
+    }
     const updated = records.filter((r) => r.id !== id)
-    saveToLocal(updated)
-    await supabase.from("papanicolaou_records").delete().eq("id", id)
+    saveToState(updated)
   }
 
   const filteredRecords = records.filter((r) => {

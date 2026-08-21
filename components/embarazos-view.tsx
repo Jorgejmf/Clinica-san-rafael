@@ -187,33 +187,28 @@ export function EmbarazosView({
       if (!error && data && data.length > 0 && data[0].controls && data[0].controls.length > 0) {
         setControls(data[0].controls)
       } else {
-        const local = localStorage.getItem(`pregnancy_${selectedPatient!.id}`)
-        if (local) {
-          try {
-            const parsed = JSON.parse(local)
-            setControls(parsed.length > 0 ? parsed : [createEmptyPregnancyControl()])
-          } catch {
-            setControls([createEmptyPregnancyControl()])
-          }
-        } else {
-          setControls([createEmptyPregnancyControl()])
-        }
+        if (error) console.error(error)
+        setControls([createEmptyPregnancyControl()])
       }
     }
     loadData()
   }, [selectedPatient])
 
-  const saveControls = (newControls: PregnancyControl[]) => {
-    setControls(newControls)
+  const saveControls = async (newControls: PregnancyControl[]) => {
+    setControls(newControls) // optimistic update
     if (selectedPatient) {
-      localStorage.setItem(`pregnancy_${selectedPatient.id}`, JSON.stringify(newControls))
-      supabase.from("pregnancy_records").upsert({
+      const { error } = await supabase.from("pregnancy_records").upsert({
         id: `preg-${selectedPatient.id}`,
         patient_id: selectedPatient.id,
         patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
         controls: newControls,
         updated_at: new Date().toISOString(),
-      })
+      }).select()
+      
+      if (error) {
+        console.error(error)
+        alert(error.message)
+      }
     }
   }
 

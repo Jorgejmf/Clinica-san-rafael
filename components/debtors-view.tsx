@@ -158,41 +158,23 @@ export function DebtorsView({
 
   useEffect(() => {
     async function loadData() {
-      const localStr = localStorage.getItem("debtors_records")
-      let localRecs: DebtorRecord[] = []
-      if (localStr) {
-        try { localRecs = JSON.parse(localStr) } catch {}
-      } else {
-        localRecs = INITIAL_DEBTORS_MOCKS
-        localStorage.setItem("debtors_records", JSON.stringify(INITIAL_DEBTORS_MOCKS))
-      }
-
       const { data, error } = await supabase
         .from("debtors")
         .select("*")
         .order("created_at", { ascending: false })
 
-      if (!error && data && data.length > 0) {
-        const map = new Map<string, DebtorRecord>()
-        data.forEach((r: DebtorRecord) => map.set(r.id, r))
-        localRecs.forEach((r: DebtorRecord) => {
-          if (!map.has(r.id)) map.set(r.id, r)
-        })
-        const combined = Array.from(map.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        setDebtors(combined)
-      } else if (localRecs.length > 0) {
-        setDebtors(localRecs)
+      if (!error && data) {
+        setDebtors(data)
       } else {
-        setDebtors(INITIAL_DEBTORS_MOCKS)
-        localStorage.setItem("debtors_records", JSON.stringify(INITIAL_DEBTORS_MOCKS))
+        if (error) console.error(error)
+        setDebtors([])
       }
     }
     loadData()
   }, [])
 
-  const saveToLocal = (newDebtors: DebtorRecord[]) => {
+  const saveToState = (newDebtors: DebtorRecord[]) => {
     setDebtors(newDebtors)
-    localStorage.setItem("debtors_records", JSON.stringify(newDebtors))
   }
 
   const handleAddDebtor = async (e: React.FormEvent) => {
@@ -212,9 +194,19 @@ export function DebtorsView({
       created_at: new Date().toISOString(),
     }
 
-    const updated = [newDeb, ...debtors.filter((d) => d.id !== newDeb.id)]
-    saveToLocal(updated)
-    await supabase.from("debtors").insert([newDeb])
+    const { data, error } = await supabase.from("debtors").insert([newDeb]).select()
+    
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      setLoading(false)
+      return
+    }
+
+    if (data && data.length > 0) {
+      const updated = [data[0], ...debtors.filter((d) => d.id !== data[0].id)]
+      saveToState(updated)
+    }
 
     setLoading(false)
     setDialogOpen(false)
@@ -227,9 +219,15 @@ export function DebtorsView({
   const handleMarkAsPaid = async (debtor: DebtorRecord) => {
     if (!confirm(`¿Marcar deuda de Q${debtor.amount} de ${debtor.patient_name} como PAGADA?`)) return
 
+    const { error } = await supabase.from("debtors").update({ status: "pagado" }).eq("id", debtor.id)
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      return
+    }
+
     const updated = debtors.map((d) => (d.id === debtor.id ? { ...d, status: "pagado" as const } : d))
-    saveToLocal(updated)
-    await supabase.from("debtors").update({ status: "pagado" }).eq("id", debtor.id)
+    saveToState(updated)
 
     // Automatically trigger sale transaction if callback provided
     if (onAddTransaction) {
@@ -239,9 +237,14 @@ export function DebtorsView({
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Está seguro de eliminar este registro de deudor?")) return
+    const { error } = await supabase.from("debtors").delete().eq("id", id)
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      return
+    }
     const updated = debtors.filter((d) => d.id !== id)
-    saveToLocal(updated)
-    await supabase.from("debtors").delete().eq("id", id)
+    saveToState(updated)
   }
 
   const filteredDebtors = debtors.filter((d) => {
