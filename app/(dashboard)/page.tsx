@@ -1,99 +1,197 @@
-import { Users, CalendarDays, DollarSign, AlertTriangle } from "lucide-react"
+import { Users, CalendarDays, DollarSign, AlertTriangle, Stethoscope, CheckCircle2, Clock, XCircle, FileText } from "lucide-react"
 import { StatCard } from "@/components/stat-card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
-import { patients as mockPatients, appointments as mockAppointments, inventory as mockInventory } from "@/lib/data"
+import { getCurrentUser } from "@/lib/auth"
+import { getTodayGT, formatDateGT, formatTimeGT, isTodayGT, isFutureGT } from "@/lib/date-utils"
+import { DOCTOR_ID, DOCTORA_ID } from "@/lib/constants"
 
 export const dynamic = "force-dynamic"
 
 export default async function DashboardPage() {
-  // Fetch all data in parallel — silently ignore individual errors
-  const [patientsRes, appointmentsRes, salesRes, inventoryRes] = await Promise.all([
+  const currentUser = await getCurrentUser()
+  const isDoctor = currentUser?.role === "doctor" || currentUser?.role === "doctora"
+  const doctorId = currentUser?.doctorId
+
+  // Fetch real data from Supabase in parallel — 100% DB-driven
+  let appointmentsQuery = supabase
+    .from("appointments")
+    .select("*, patients(id, first_name, last_name, phone, no_expediente)")
+    .order("scheduled_at", { ascending: true })
+
+  if (isDoctor && doctorId) {
+    appointmentsQuery = appointmentsQuery.eq("doctor_id", doctorId)
+  }
+
+  let recordsQuery = supabase.from("medical_records").select("id, created_at, doctor_id")
+  if (isDoctor && doctorId) {
+    recordsQuery = recordsQuery.eq("doctor_id", doctorId)
+  }
+
+  const [patientsRes, appointmentsRes, recordsRes, salesRes, inventoryRes] = await Promise.all([
     supabase.from("patients").select("*").order("created_at", { ascending: false }),
-    supabase.from("appointments").select("*, patients(id, first_name, last_name)").order("scheduled_at", { ascending: false }),
+    appointmentsQuery,
+    recordsQuery,
     supabase.from("transactions").select("amount, type").eq("type", "income"),
     supabase.from("products").select("*"),
   ])
 
-  // Use DB data when available, otherwise fall back to demo/mock data
-  const dbPatients = patientsRes.data ?? []
-  const dbAppointments = appointmentsRes.data ?? []
-  const dbSales = salesRes.data ?? []
-  const dbInventory = inventoryRes.data ?? []
+  const patients = patientsRes.data ?? []
+  const appointments = appointmentsRes.data ?? []
+  const medicalRecords = recordsRes.data ?? []
+  const sales = salesRes.data ?? []
+  const inventory = inventoryRes.data ?? []
 
-  const patients    = dbPatients.length    > 0 ? dbPatients    : mockPatients
-  const appointments = dbAppointments.length > 0 ? dbAppointments : mockAppointments
-  const sales        = dbSales.length        > 0 ? dbSales        : []
-  const inventory    = dbInventory.length    > 0 ? dbInventory    : mockInventory
+  // Active / Inactive patients
+  const activePatients = patients.filter((p: any) => (p.status || p.estado || "Activo") !== "Inactivo").length
+  const inactivePatients = patients.length - activePatients
 
-  // Today in local YYYY-MM-DD format (avoids UTC timezone bug)
-  const now   = new Date()
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+  // Today's appointments in Guatemala timezone (America/Guatemala)
+  const todayAppointments = appointments.filter((a: any) => isTodayGT(a.scheduled_at))
 
-  // Filter today's appointments supporting both "scheduled_at" (DB) and "fecha" (mock)
-  const todayAppointments = appointments.filter((a: any) => {
-    const raw = a.scheduled_at ?? (a.fecha ? `${a.fecha}T00:00:00` : "")
-    return raw.startsWith(today)
-  })
-
-  const confirmedToday = todayAppointments.filter((a: any) => {
-    const st = (a.status ?? a.estado ?? "").toLowerCase()
-    return st === "confirmed" || st === "confirmada" || st === "completed" || st === "atendida"
+  // Appointment counts by status
+  const pendingCount = todayAppointments.filter((a: any) => {
+    const st = (a.status || a.estado || "").toLowerCase()
+    return st === "pending" || st === "pendiente"
   }).length
 
-  // Low stock — supports DB fields (stock / min_stock) AND mock fields (cantidad / minimo)
+  const confirmedCount = todayAppointments.filter((a: any) => {
+    const st = (a.status || a.estado || "").toLowerCase()
+    return st === "confirmed" || st === "confirmada"
+  }).length
+
+  const completedCount = todayAppointments.filter((a: any) => {
+    const st = (a.status || a.estado || "").toLowerCase()
+    return st === "completed" || st === "atendida" || st === "attended"
+  }).length
+
+  const cancelledCount = todayAppointments.filter((a: any) => {
+    const st = (a.status || a.estado || "").toLowerCase()
+    return st === "cancelled" || st === "cancelada"
+  }).length
+
+  // Low stock inventory
   const lowStockItems = inventory.filter((i: any) => {
-    const current = i.stock    ?? i.cantidad ?? 0
-    const minimum  = i.min_stock ?? i.minimo   ?? 5
+    const current = i.stock ?? i.cantidad ?? 0
+    const minimum = i.min_stock ?? i.minimo ?? 5
     return current <= minimum
   })
 
-  const totalSales = sales.reduce((sum: number, s: any) => sum + Number(s.amount ?? 0), 0)
+  // PRÓXIMAS CITAS (REQUERIMIENTO 6):
+  // 1. Solo citas futuras en hora de Guatemala (isFutureGT).
+  // 2. Excluir canceladas, completadas/atendidas.
+  // 3. Solo incluir estados activos pendientes o confirmados.
+  // 4. Orden ascendente (la más cercana primero).
+  const upcomingAppointments = appointments
+    .filter((a: any) => {
+      const st = (a.status || a.estado || "pending").toLowerCase()
+      const isActiveStatus = st === "pending" || st === "pendiente" || st === "confirmed" || st === "confirmada"
+      if (!isActiveStatus) return false
+      return isFutureGT(a.scheduled_at)
+    })
+    .sort((a: any, b: any) => {
+      const timeA = new Date(a.scheduled_at || 0).getTime()
+      const timeB = new Date(b.scheduled_at || 0).getTime()
+      return timeA - timeB
+    })
+    .slice(0, 8)
 
-  const digitalizedCount = patients.filter(
-    (p: any) => p.digitalizado || p.digitalized
-  ).length
+  const todayGT = getTodayGT()
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl text-balance">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Bienvenido al sistema de gestión de Clínica San Rafael
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border pb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl text-balance">
+            Dashboard — Clínica San Rafael
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isDoctor
+              ? `Vista personalizada para ${currentUser?.displayName || "Médico"}`
+              : "Panel general del sistema de gestión médica"}
+            {" · "}
+            <span className="font-semibold text-primary">
+              Hoy: {formatDateGT(todayGT, { includeWeekday: true, monthFormat: "long" })}
+            </span>
+          </p>
+        </div>
+
+        {isDoctor && (
+          <Badge className="bg-primary/10 text-primary border-primary/30 text-xs font-bold py-1 px-3 self-start sm:self-auto">
+            <Stethoscope className="h-3.5 w-3.5 mr-1" />
+            {currentUser?.displayName}
+          </Badge>
+        )}
       </div>
 
-      {/* Stat cards */}
+      {/* Main Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Pacientes"
           value={patients.length}
           icon={Users}
-          description={`${digitalizedCount} expedientes digitalizados`}
+          description={`${activePatients} activos · ${inactivePatients} inactivos`}
         />
         <StatCard
           title="Citas de Hoy"
           value={todayAppointments.length}
           icon={CalendarDays}
-          description={`${confirmedToday} confirmadas / atendidas`}
+          description={`${confirmedCount} confirmadas · ${pendingCount} pendientes`}
         />
         <StatCard
-          title="Ventas Recientes"
-          value={`Q${totalSales.toLocaleString("es-GT")}`}
-          icon={DollarSign}
-          description={`${sales.length} transacciones`}
+          title="Consultas Realizadas"
+          value={medicalRecords.length}
+          icon={FileText}
+          description={isDoctor ? "En tu expediente médico" : "Historial clínico total"}
         />
         <StatCard
-          title="Alertas Inventario"
-          value={lowStockItems.length}
-          icon={AlertTriangle}
-          description="Productos con stock bajo"
-          variant="warning"
+          title={isDoctor ? "Citas Atendidas Hoy" : "Alertas Inventario"}
+          value={isDoctor ? completedCount : lowStockItems.length}
+          icon={isDoctor ? CheckCircle2 : AlertTriangle}
+          description={isDoctor ? `${cancelledCount} canceladas hoy` : "Productos con stock bajo"}
+          variant={isDoctor ? "default" : lowStockItems.length > 0 ? "warning" : "default"}
         />
+      </div>
+
+      {/* Citas de hoy: Desglose por estados */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-800 uppercase">Pendientes</span>
+            <Clock className="h-4 w-4 text-amber-600" />
+          </div>
+          <p className="mt-2 text-2xl font-black text-amber-900">{pendingCount}</p>
+          <span className="text-[11px] text-amber-700">Por atender hoy</span>
+        </div>
+
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-800 uppercase">Confirmadas</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          </div>
+          <p className="mt-2 text-2xl font-black text-emerald-900">{confirmedCount}</p>
+          <span className="text-[11px] text-emerald-700">Asistencia confirmada</span>
+        </div>
+
+        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-blue-800 uppercase">Atendidas</span>
+            <Stethoscope className="h-4 w-4 text-blue-600" />
+          </div>
+          <p className="mt-2 text-2xl font-black text-blue-900">{completedCount}</p>
+          <span className="text-[11px] text-blue-700">Consulta finalizada</span>
+        </div>
+
+        <div className="rounded-xl border border-red-200 bg-red-50/50 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-red-800 uppercase">Canceladas</span>
+            <XCircle className="h-4 w-4 text-red-600" />
+          </div>
+          <p className="mt-2 text-2xl font-black text-red-900">{cancelledCount}</p>
+          <span className="text-[11px] text-red-700">Canceladas de hoy</span>
+        </div>
       </div>
 
       {/* Tables section */}
@@ -102,53 +200,55 @@ export default async function DashboardPage() {
         <div className="rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <h2 className="text-base font-semibold text-card-foreground">
-              Pacientes Recientes
+              Pacientes Registrados Recientemente
             </h2>
             <Link href="/pacientes" className="text-sm font-medium text-primary hover:underline">
-              Ver todos
+              Ver todos ({patients.length})
             </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-5 py-3 text-left font-medium text-muted-foreground">Expediente</th>
-                  <th className="px-5 py-3 text-left font-medium text-muted-foreground">Nombre</th>
-                  <th className="px-5 py-3 text-left font-medium text-muted-foreground">Estado</th>
+                <tr className="border-b border-border bg-muted/40 text-xs font-bold uppercase text-muted-foreground">
+                  <th className="px-5 py-3 text-left">Expediente</th>
+                  <th className="px-5 py-3 text-left">Nombre</th>
+                  <th className="px-5 py-3 text-center">Estado</th>
+                  <th className="px-5 py-3 text-right">Acción</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {patients.slice(0, 6).map((p: any) => {
-                  // Support both DB schema (first_name / last_name) and mock (nombre)
-                  const name = p.first_name
-                    ? `${p.first_name} ${p.last_name ?? ""}`.trim()
-                    : (p.nombre ?? "Paciente")
-                  const code = p.no_expediente ?? p.id ?? "-"
-                  const codeDisplay = String(code).length > 12 ? String(code).substring(0, 8).toUpperCase() : code
-                  const status = p.estado ?? p.status ?? "Activo"
+                  const name = `${p.first_name || ""} ${p.last_name || ""}`.trim() || "Paciente"
+                  const code = p.no_expediente || p.id.substring(0, 8).toUpperCase()
+                  const status = p.status || p.estado || "Activo"
+
                   return (
-                    <tr key={p.id ?? name} className="border-b border-border last:border-0 hover:bg-muted/20">
-                      <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{codeDisplay}</td>
+                    <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-5 py-3 font-mono text-xs font-bold text-primary">#{code}</td>
                       <td className="px-5 py-3 font-medium text-card-foreground">{name}</td>
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-3 text-center">
                         <Badge
-                          variant="default"
-                          className={`text-xs ${
-                            String(status).toLowerCase() === "inactivo"
-                              ? "bg-muted text-muted-foreground"
-                              : "bg-primary/15 text-primary"
+                          className={`text-[10px] font-bold uppercase ${
+                            status === "Activo"
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : "bg-muted text-muted-foreground"
                           }`}
                         >
                           {status}
                         </Badge>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <Link href={`/pacientes/${p.id}`}>
+                          <span className="text-xs font-bold text-primary hover:underline">Ver ficha</span>
+                        </Link>
                       </td>
                     </tr>
                   )
                 })}
                 {patients.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-5 py-8 text-center text-sm text-muted-foreground">
-                      No hay pacientes registrados aún
+                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                      No hay pacientes registrados en la base de datos aún
                     </td>
                   </tr>
                 )}
@@ -157,59 +257,45 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Upcoming appointments */}
+        {/* Upcoming appointments (Requerimiento 6: Solo futuras, orden ascendente) */}
         <div className="rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <h2 className="text-base font-semibold text-card-foreground">
-              Próximas Citas
+              Próximas Citas ({upcomingAppointments.length})
             </h2>
             <Link href="/citas" className="text-sm font-medium text-primary hover:underline">
-              Ver todas
+              Ver agenda completa
             </Link>
           </div>
-          <div className="divide-y divide-border">
-            {appointments.slice(0, 6).map((a: any) => {
-              // Patient name from DB join or mock field
+          <div className="divide-y divide-border max-h-[380px] overflow-y-auto">
+            {upcomingAppointments.map((a: any) => {
               const patientName = a.patients
-                ? `${a.patients.first_name} ${a.patients.last_name ?? ""}`.trim()
-                : (a.pacienteNombre ?? "Paciente")
+                ? `${a.patients.first_name} ${a.patients.last_name}`
+                : a.notes || "Paciente sin nombre"
 
-              // Date/time — support both DB ISO and mock separate fecha+hora
-              const rawDt = a.scheduled_at
-                ?? (a.fecha ? `${a.fecha}T${a.hora ?? "00:00"}:00` : "")
-              let displayDate = rawDt
-              try {
-                if (rawDt) {
-                  const d = new Date(rawDt)
-                  if (!isNaN(d.getTime())) {
-                    displayDate = d.toLocaleDateString("es-GT", {
-                      day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"
-                    })
-                  }
-                }
-              } catch {}
-
-              const motivo = a.reason ?? a.motivo ?? ""
-              const status = a.status ?? a.estado ?? "pending"
+              const status = a.status || a.estado || "pending"
 
               return (
-                <div key={a.id} className="flex items-center gap-4 px-5 py-4 hover:bg-muted/20">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <div key={a.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/20 transition-colors">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <CalendarDays className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-card-foreground">{patientName}</p>
+                    <p className="truncate text-sm font-bold text-card-foreground">{patientName}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {displayDate}{motivo ? ` · ${motivo}` : ""}
+                      {formatDateGT(a.scheduled_at)} a las {formatTimeGT(a.scheduled_at)} hrs
+                      {a.reason ? ` · ${a.reason}` : ""}
                     </p>
                   </div>
                   <AppointmentBadge estado={status} />
                 </div>
               )
             })}
-            {appointments.length === 0 && (
-              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No hay citas registradas aún
+            {upcomingAppointments.length === 0 && (
+              <div className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <CalendarDays className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="font-medium">No hay próximas citas programadas</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">Las nuevas citas agendadas para fechas u horas futuras aparecerán aquí.</p>
               </div>
             )}
           </div>
@@ -217,7 +303,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Low stock alerts */}
-      {lowStockItems.length > 0 && (
+      {lowStockItems.length > 0 && !isDoctor && (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 shadow-sm">
           <div className="flex items-center gap-3 border-b border-destructive/20 px-5 py-4">
             <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -227,9 +313,9 @@ export default async function DashboardPage() {
           </div>
           <div className="divide-y divide-destructive/10">
             {lowStockItems.map((item: any) => {
-              const itemName    = item.nombre ?? item.name ?? "Producto"
-              const current     = item.stock    ?? item.cantidad ?? 0
-              const minimum     = item.min_stock ?? item.minimo   ?? 5
+              const itemName = item.nombre || item.name || "Producto"
+              const current = item.stock ?? item.cantidad ?? 0
+              const minimum = item.min_stock ?? item.minimo ?? 5
               return (
                 <div key={item.id} className="flex items-center justify-between px-5 py-3">
                   <span className="text-sm font-medium text-card-foreground">{itemName}</span>
@@ -253,21 +339,25 @@ function AppointmentBadge({ estado }: { estado: string }) {
   if (!estado) return null
   const st = estado.toLowerCase()
   const map: Record<string, string> = {
-    pending:    "bg-amber-100 text-amber-700",
-    pendiente:  "bg-amber-100 text-amber-700",
-    confirmed:  "bg-primary/15 text-primary",
-    confirmada: "bg-primary/15 text-primary",
-    completed:  "bg-blue-100 text-blue-700",
-    atendida:   "bg-blue-100 text-blue-700",
-    cancelled:  "bg-destructive/15 text-destructive",
-    cancelada:  "bg-destructive/15 text-destructive",
+    pending: "bg-amber-100 text-amber-800 border-amber-300",
+    pendiente: "bg-amber-100 text-amber-800 border-amber-300",
+    confirmed: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    confirmada: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    completed: "bg-blue-100 text-blue-800 border-blue-300",
+    atendida: "bg-blue-100 text-blue-800 border-blue-300",
+    attended: "bg-blue-100 text-blue-800 border-blue-300",
+    cancelled: "bg-red-100 text-red-800 border-red-300",
+    cancelada: "bg-red-100 text-red-800 border-red-300",
   }
   const labels: Record<string, string> = {
-    pending: "Pendiente", confirmed: "Confirmada",
-    completed: "Atendida", cancelled: "Cancelada",
+    pending: "Pendiente",
+    confirmed: "Confirmada",
+    completed: "Atendida",
+    attended: "Atendida",
+    cancelled: "Cancelada",
   }
   return (
-    <Badge variant="secondary" className={`shrink-0 text-xs ${map[st] ?? "bg-secondary"}`}>
+    <Badge variant="outline" className={`shrink-0 text-xs font-bold ${map[st] ?? "bg-secondary"}`}>
       {labels[st] ?? estado}
     </Badge>
   )

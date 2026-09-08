@@ -38,17 +38,20 @@ import {
   UserCheck,
   XCircle,
   LayoutGrid,
+  CheckCircle2,
+  Check,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { DOCTOR_ID, DOCTORA_ID } from "@/lib/constants"
 import { FichaClinicaForm } from "./ficha-clinica-form"
 import { ScheduleGrid } from "./schedule-grid"
+import { getTodayGT, formatDateGT, formatTimeGT, formatDateTimeGT, isTodayGT } from "@/lib/date-utils"
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700 border-amber-200",
-  confirmed: "status-confirmed border",
-  completed: "bg-blue-100 text-blue-700 border-blue-200",
-  cancelled: "bg-red-100 text-red-700 border-red-200",
+  pending: "bg-amber-100 text-amber-800 border-amber-300",
+  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  completed: "bg-blue-100 text-blue-800 border-blue-300",
+  cancelled: "bg-red-100 text-red-800 border-red-300",
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -214,8 +217,8 @@ export function AppointmentsView({
   const [selectedPatientObj, setSelectedPatientObj] = useState<Patient | null>(null)
   const [debtorStatus, setDebtorStatus] = useState<{ isDebtor: boolean; totalDebt: number } | null>(null)
   const [doctorId, setDoctorId] = useState(DOCTOR_ID)
-  const [date, setDate] = useState("")
-  const [time, setTime] = useState("")
+  const [date, setDate] = useState(getTodayGT())
+  const [time, setTime] = useState("09:00")
   const [reason, setReason] = useState("")
   const [status, setStatus] = useState("pending")
 
@@ -266,19 +269,6 @@ export function AppointmentsView({
   const [emergencyDoctorId, setEmergencyDoctorId] = useState(DOCTOR_ID)
   const [selectedEmergencyPatient, setSelectedEmergencyPatient] = useState<Patient | null>(null)
 
-  const timeOptions = doctorId === DOCTOR_ID
-    ? ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"]
-    : ["08:00", "08:45", "09:30", "10:15", "11:00", "11:45", "12:30", "13:15", "14:00", "14:45", "15:30", "16:15", "17:00", "17:45"]
-
-  const isTodayLocal = (dateString: string) => {
-    if (!dateString) return false
-    const d = new Date(dateString)
-    const today = new Date()
-    return d.getDate() === today.getDate() && 
-           d.getMonth() === today.getMonth() && 
-           d.getFullYear() === today.getFullYear()
-  }
-
   // All appointments visible to the current user (filtered by doctor if doctor)
   const myAppointments = useMemo(() => {
     return isDoctor && userDoctorId
@@ -288,13 +278,25 @@ export function AppointmentsView({
 
   const doctorAppointments = useMemo(() => {
     return myAppointments.filter(
-      (a) => a.doctor_id === DOCTOR_ID && isTodayLocal(a.scheduled_at) && !a.is_emergency
+      (a) =>
+        a.doctor_id === DOCTOR_ID &&
+        isTodayGT(a.scheduled_at) &&
+        !a.is_emergency &&
+        a.status !== "completed" &&
+        a.status !== "atendida" &&
+        a.status !== "attended"
     )
   }, [myAppointments])
 
   const doctoraAppointments = useMemo(() => {
     return myAppointments.filter(
-      (a) => a.doctor_id === DOCTORA_ID && isTodayLocal(a.scheduled_at) && !a.is_emergency
+      (a) =>
+        a.doctor_id === DOCTORA_ID &&
+        isTodayGT(a.scheduled_at) &&
+        !a.is_emergency &&
+        a.status !== "completed" &&
+        a.status !== "atendida" &&
+        a.status !== "attended"
     )
   }, [myAppointments])
 
@@ -324,7 +326,7 @@ export function AppointmentsView({
     if (!error && data?.[0]) {
       setAppointments([data[0], ...appointments])
       setDialogOpen(false)
-      setPatientId(""); setSelectedPatientObj(null); setDate(""); setTime(""); setReason(""); setStatus("pending")
+      setPatientId(""); setSelectedPatientObj(null); setDate(getTodayGT()); setTime("09:00"); setReason(""); setStatus("pending")
       router.refresh()
     } else {
       alert("Error al guardar la cita: " + (error?.message || "intente nuevamente"))
@@ -405,22 +407,80 @@ export function AppointmentsView({
     }
   }
 
-  const handleDeleteAppointment = async (id: string) => {
-    if (!confirm("¿Está seguro de eliminar esta cita?")) return
-    const { error } = await supabase.from("appointments").delete().eq("id", id)
+  // ACCIÓN PARA DOCTOR: CONFIRMAR CITA (REQUERIMIENTO 11)
+  const handleConfirmAppointment = async (id: string, patientName: string) => {
+    if (!confirm(`¿Confirmar la cita del paciente ${patientName}?`)) return
+    setLoading(true)
+
+    const { error } = await supabase
+      .from("appointments")
+      .update({ status: "confirmed" })
+      .eq("id", id)
+
+    setLoading(false)
     if (!error) {
-      setAppointments(appointments.filter((a) => a.id !== id))
+      setAppointments(appointments.map((a) => (a.id === id ? { ...a, status: "confirmed" } : a)))
       router.refresh()
     } else {
-      alert("Error al eliminar cita: " + error.message)
+      alert("Error al confirmar la cita: " + error.message)
+    }
+  }
+
+  // ACCIÓN PARA DOCTOR: MARCAR CITA COMO ATENDIDA (REQUERIMIENTO 7)
+  const handleMarkAttended = async (id: string, patientName: string) => {
+    if (!confirm(`¿Marcar como atendida la cita de ${patientName}? Se registrará la finalización de la consulta.`)) return
+    setLoading(true)
+
+    const nowIso = new Date().toISOString()
+    const { error } = await supabase
+      .from("appointments")
+      .update({
+        status: "completed",
+        attended_at: nowIso,
+      })
+      .eq("id", id)
+
+    setLoading(false)
+    if (!error) {
+      setAppointments(
+        appointments.map((a) => (a.id === id ? { ...a, status: "completed", attended_at: nowIso } : a))
+      )
+      router.refresh()
+    } else {
+      // Fallback if attended_at column isn't in DB schema yet
+      const { error: retryError } = await supabase
+        .from("appointments")
+        .update({ status: "completed" })
+        .eq("id", id)
+
+      if (!retryError) {
+        setAppointments(appointments.map((a) => (a.id === id ? { ...a, status: "completed" } : a)))
+        router.refresh()
+      } else {
+        alert("Error al marcar como atendida: " + (error?.message || retryError?.message || "Error"))
+      }
+    }
+  }
+
+  // ELIMINACIÓN REAL DE CITA EN SUPABASE (REQUERIMIENTO 3)
+  const handleDeleteAppointment = async (id: string) => {
+    setLoading(true)
+    const { error } = await supabase.from("appointments").delete().eq("id", id)
+    setLoading(false)
+
+    if (!error) {
+      // Remover de React state inmediatamente para que el horario quede disponible
+      setAppointments((prev) => prev.filter((a) => a.id !== id))
+      router.refresh()
+    } else {
+      alert("Error al eliminar cita de la base de datos: " + error.message)
     }
   }
 
   const handleAddEmergency = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const now = new Date()
-    const scheduledAt = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 19)
+    const scheduledAt = `${getTodayGT()}T${formatTimeGT(new Date())}:00`
     const { data, error } = await supabase.from("appointments").insert([
       {
         patient_id: selectedEmergencyPatient ? selectedEmergencyPatient.id : null,
@@ -453,7 +513,7 @@ export function AppointmentsView({
           {/* Emergency button */}
           <Dialog open={emergencyDialogOpen} onOpenChange={setEmergencyDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="h-11 rounded-xl border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400">
+              <Button variant="outline" className="h-11 rounded-xl border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 font-semibold">
                 <AlertCircle className="mr-2 h-4 w-4" />
                 Paciente Emergencia
               </Button>
@@ -467,7 +527,7 @@ export function AppointmentsView({
               </DialogHeader>
               <form onSubmit={handleAddEmergency} className="space-y-4 pt-2">
                 <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-sm text-red-700">
-                  Se registrará un paciente <strong>sin cita previa</strong> con hora de llegada actual.
+                  Se registrará un paciente <strong>sin cita previa</strong> con hora de llegada actual ({formatTimeGT(new Date())} hrs).
                 </div>
                 <div className="space-y-2">
                   <Label>Paciente (Búsqueda o Nuevo)</Label>
@@ -500,13 +560,13 @@ export function AppointmentsView({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={DOCTOR_ID}>Doctor</SelectItem>
-                      <SelectItem value={DOCTORA_ID}>Doctora</SelectItem>
+                      <SelectItem value={DOCTOR_ID}>Dr. Médico</SelectItem>
+                      <SelectItem value={DOCTORA_ID}>Dra. Médica</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <Button type="submit" disabled={loading} className="h-11 rounded-xl bg-red-600 hover:bg-red-700 text-white px-6">
+                  <Button type="submit" disabled={loading} className="h-11 rounded-xl bg-red-600 hover:bg-red-700 text-white px-6 font-bold">
                     {loading ? "Registrando..." : "Registrar Emergencia"}
                   </Button>
                 </div>
@@ -517,14 +577,14 @@ export function AppointmentsView({
           {/* New appointment */}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="h-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button className="h-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold">
                 <Plus className="mr-2 h-4 w-4" />
                 Agendar Cita
               </Button>
             </DialogTrigger>
             <DialogContent className="rounded-2xl sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Nueva Cita</DialogTitle>
+                <DialogTitle>Nueva Cita Médica</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleAddAppointment} className="space-y-4 pt-2">
                 <div className="space-y-2">
@@ -549,7 +609,7 @@ export function AppointmentsView({
                       </span>
                       {debtorStatus?.isDebtor ? (
                         <Badge className="bg-red-600 text-white font-semibold">
-                          🔴 Deudor@ - Debe ${debtorStatus.totalDebt.toFixed(2)}
+                          🔴 Deudor@ - Debe Q{debtorStatus.totalDebt.toFixed(2)}
                         </Badge>
                       ) : (
                         <Badge className="bg-emerald-600 text-white font-semibold">
@@ -572,7 +632,7 @@ export function AppointmentsView({
                 )}
 
                 <div className="space-y-2">
-                  <Label>Médico</Label>
+                  <Label>Médico Asignado</Label>
                   <Select value={doctorId} onValueChange={setDoctorId}>
                     <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue />
@@ -581,13 +641,13 @@ export function AppointmentsView({
                       <SelectItem value={DOCTOR_ID}>
                         <div className="flex items-center gap-2">
                           <Stethoscope className="h-4 w-4 text-blue-500" />
-                          Doctor (Ciclos de 30 min)
+                          Dr. Médico (Ciclos de 30 min)
                         </div>
                       </SelectItem>
                       <SelectItem value={DOCTORA_ID}>
                         <div className="flex items-center gap-2">
                           <Stethoscope className="h-4 w-4 text-pink-500" />
-                          Doctora (Ciclos de 45 min)
+                          Dra. Médica (Ciclos de 45 min)
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -606,7 +666,7 @@ export function AppointmentsView({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Hora</Label>
+                    <Label>Hora (24 hrs)</Label>
                     <Input
                       type="time"
                       required
@@ -647,7 +707,7 @@ export function AppointmentsView({
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="h-11 rounded-xl bg-primary px-6 text-primary-foreground hover:bg-primary/90"
+                    className="h-11 rounded-xl bg-primary px-6 text-primary-foreground font-bold hover:bg-primary/90"
                   >
                     {loading ? "Guardando..." : "Guardar Cita"}
                   </Button>
@@ -687,15 +747,15 @@ export function AppointmentsView({
                       {a.patients ? `${a.patients.first_name} ${a.patients.last_name}` : a.notes || "Paciente sin nombre registrado"}
                     </p>
                     <p className="text-xs text-gray-600">{a.reason}</p>
-                    <p className="mt-0.5 text-xs text-gray-400">
-                      Llegada: {new Date(a.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    <p className="mt-0.5 text-xs text-gray-500 font-medium">
+                      Llegada: {formatTimeGT(a.scheduled_at)} hrs
                       {" · "}
-                      {a.doctor_id === DOCTOR_ID ? "Doctor" : "Doctora"}
+                      {a.doctor_id === DOCTOR_ID ? "Dr. Médico" : "Dra. Médica"}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge className="shrink-0 bg-red-100 text-red-700 border-red-200 border">
+                  <Badge className="shrink-0 bg-red-100 text-red-700 border-red-200 border font-bold">
                     {a.status === "completed" ? "ATENDIDA" : "EMERGENCIA"}
                   </Badge>
                   {isAdmin && (
@@ -704,7 +764,9 @@ export function AppointmentsView({
                       size="icon"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDeleteAppointment(a.id)
+                        if (confirm("¿Eliminar este registro de emergencia?")) {
+                          handleDeleteAppointment(a.id)
+                        }
                       }}
                       className="h-8 w-8 text-destructive hover:bg-destructive/10"
                     >
@@ -730,13 +792,13 @@ export function AppointmentsView({
           {(!isDoctor || userRole === "doctor") && (
             <TabsTrigger value="doctor" className="rounded-lg text-sm gap-2">
               <Stethoscope className="h-4 w-4 text-blue-500" />
-              Doctor
+              Dr. Médico
             </TabsTrigger>
           )}
           {(!isDoctor || userRole === "doctora") && (
             <TabsTrigger value="doctora" className="rounded-lg text-sm gap-2">
               <Stethoscope className="h-4 w-4 text-pink-500" />
-              Doctora
+              Dra. Médica
             </TabsTrigger>
           )}
           <TabsTrigger value="calendario" className="rounded-lg text-sm gap-2">
@@ -745,11 +807,11 @@ export function AppointmentsView({
           </TabsTrigger>
           <TabsTrigger value="lista" className="rounded-lg text-sm gap-2">
             <List className="h-4 w-4" />
-            Lista
+            Todas las Citas
           </TabsTrigger>
         </TabsList>
 
-        {/* Schedule Grid for Secretary & Admin */}
+        {/* Schedule Grid for Secretary & Admin with Real Deletion */}
         {canEdit && (
           <TabsContent value="horario" className="mt-4">
             <ScheduleGrid
@@ -760,6 +822,7 @@ export function AppointmentsView({
                 setDoctorId(slotDoctorId)
                 setDialogOpen(true)
               }}
+              onDeleteAppointment={handleDeleteAppointment}
             />
           </TabsContent>
         )}
@@ -770,13 +833,13 @@ export function AppointmentsView({
             <div className="mb-3 flex items-center gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-2.5">
               <UserCheck className="h-4 w-4 text-blue-600" />
               <span className="text-sm text-blue-700 font-medium">
-                Haz clic en una cita pendiente para abrir la ficha clínica
+                Citas del Dr. Médico hoy — Presiona &quot;Confirmar Cita&quot; para confirmar asistencia o haz clic para abrir la ficha clínica.
               </span>
             </div>
           )}
           <AppointmentList 
             appointments={doctorAppointments} 
-            doctorLabel="Doctor" 
+            doctorLabel="Dr. Médico" 
             doctorColor="blue" 
             isDoctor={isDoctor}
             isAdmin={isAdmin}
@@ -784,6 +847,8 @@ export function AppointmentsView({
             onSelect={(a) => setSelectedAppointment(a)}
             onEdit={handleOpenEdit}
             onDelete={handleDeleteAppointment}
+            onConfirm={handleConfirmAppointment}
+            onMarkAttended={handleMarkAttended}
             onUpdateStatus={handleUpdateStatus}
           />
         </TabsContent>
@@ -794,13 +859,13 @@ export function AppointmentsView({
             <div className="mb-3 flex items-center gap-2 rounded-xl bg-pink-50 border border-pink-100 px-4 py-2.5">
               <UserCheck className="h-4 w-4 text-pink-600" />
               <span className="text-sm text-pink-700 font-medium">
-                Haz clic en una cita pendiente para abrir la ficha clínica
+                Citas de la Dra. Médica hoy — Presiona &quot;Confirmar Cita&quot; para confirmar asistencia o &quot;Atendido&quot; para finalizar la cita.
               </span>
             </div>
           )}
           <AppointmentList 
             appointments={doctoraAppointments} 
-            doctorLabel="Doctora" 
+            doctorLabel="Dra. Médica" 
             doctorColor="pink" 
             isDoctor={isDoctor}
             isAdmin={isAdmin}
@@ -808,6 +873,8 @@ export function AppointmentsView({
             onSelect={(a) => setSelectedAppointment(a)}
             onEdit={handleOpenEdit}
             onDelete={handleDeleteAppointment}
+            onConfirm={handleConfirmAppointment}
+            onMarkAttended={handleMarkAttended}
             onUpdateStatus={handleUpdateStatus}
           />
         </TabsContent>
@@ -824,6 +891,8 @@ export function AppointmentsView({
             }}
             onUpdateStatus={handleUpdateStatus}
             onEdit={handleOpenEdit}
+            onConfirm={handleConfirmAppointment}
+            onDelete={handleDeleteAppointment}
             canEdit={canEdit}
             isDoctor={isDoctor}
           />
@@ -833,7 +902,7 @@ export function AppointmentsView({
         <TabsContent value="lista" className="mt-4">
           <AppointmentList 
             appointments={myAppointments.filter((a) => !a.is_emergency)} 
-            doctorLabel={isDoctor ? (userRole === "doctor" ? "Doctor" : "Doctora") : "Todos"} 
+            doctorLabel={isDoctor ? (userRole === "doctor" ? "Dr. Médico" : "Dra. Médica") : "Todos"} 
             doctorColor="blue" 
             isDoctor={isDoctor}
             isAdmin={isAdmin}
@@ -841,6 +910,8 @@ export function AppointmentsView({
             onSelect={(a) => setSelectedAppointment(a)}
             onEdit={handleOpenEdit}
             onDelete={handleDeleteAppointment}
+            onConfirm={handleConfirmAppointment}
+            onMarkAttended={handleMarkAttended}
             onUpdateStatus={handleUpdateStatus}
             showDoctorBadge={!isDoctor}
           />
@@ -939,13 +1010,13 @@ export function AppointmentsView({
                 className="h-11 rounded-xl border-red-300 text-red-600 hover:bg-red-50"
               >
                 <XCircle className="mr-1.5 h-4 w-4" />
-                Cancelar Cita
+                Marcar Cancelada
               </Button>
 
               <Button
                 type="submit"
                 disabled={loading}
-                className="h-11 rounded-xl bg-primary px-6 text-primary-foreground hover:bg-primary/90"
+                className="h-11 rounded-xl bg-primary px-6 text-primary-foreground font-bold hover:bg-primary/90"
               >
                 {loading ? "Guardando..." : "Guardar Cambios"}
               </Button>
@@ -992,6 +1063,8 @@ function AppointmentList({
   onSelect,
   onEdit,
   onDelete,
+  onConfirm,
+  onMarkAttended,
   onUpdateStatus,
   showDoctorBadge = false,
 }: {
@@ -1004,6 +1077,8 @@ function AppointmentList({
   onSelect: (a: Appointment) => void
   onEdit: (a: Appointment) => void
   onDelete: (id: string) => void
+  onConfirm?: (id: string, name: string) => void
+  onMarkAttended?: (id: string, name: string) => void
   onUpdateStatus: (id: string, status: string) => void
   showDoctorBadge?: boolean
 }) {
@@ -1011,11 +1086,15 @@ function AppointmentList({
     blue: "bg-blue-50 text-blue-600",
     pink: "bg-pink-50 text-pink-600",
   }
+
   return (
     <div className="space-y-3">
       {appointments.map((a) => {
-        const d = new Date(a.scheduled_at)
         const isClickable = isDoctor && a.status !== "completed" && a.status !== "cancelled"
+        const patientFullName = a.patients
+          ? `${a.patients.first_name} ${a.patients.last_name}`
+          : "Paciente sin nombre"
+
         return (
           <div
             key={a.id}
@@ -1028,28 +1107,42 @@ function AppointmentList({
               </div>
               <div>
                 <p className="text-sm font-semibold text-card-foreground">
-                  {a.patients?.first_name} {a.patients?.last_name}
+                  {patientFullName}
                 </p>
-                <p className="text-xs text-muted-foreground">{a.reason}</p>
+                <p className="text-xs text-muted-foreground">{a.reason || "Consulta médica"}</p>
                 <div className="mt-1 flex items-center gap-3">
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <CalendarDays className="h-3 w-3" />
-                    {d.toLocaleDateString("es-GT")}
+                    {formatDateGT(a.scheduled_at)}
                   </span>
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
-                    {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {formatTimeGT(a.scheduled_at)} hrs
                   </span>
                   {showDoctorBadge && (
                     <Badge variant="outline" className={`text-[10px] py-0 h-4 ${a.doctor_id === DOCTOR_ID ? 'text-blue-600 border-blue-200 bg-blue-50' : 'text-pink-600 border-pink-200 bg-pink-50'}`}>
-                      {a.doctor_id === DOCTOR_ID ? "Doctor" : "Doctora"}
+                      {a.doctor_id === DOCTOR_ID ? "Dr. Médico" : "Dra. Médica"}
                     </Badge>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap" onClick={(e) => e.stopPropagation()}>
+              {/* BOTÓN ÚNICO ATENDIDO PARA DOCTORES */}
+              {isDoctor && a.status !== "completed" && a.status !== "atendida" && a.status !== "attended" && a.status !== "cancelled" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onMarkAttended?.(a.id, patientFullName)}
+                  className="h-8 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs gap-1 shadow-sm px-3"
+                  title="Marcar cita como atendida"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Atendido
+                </Button>
+              )}
+
               {isSecretaria && (
                 <div className="flex items-center gap-2">
                   <Select value={a.status} onValueChange={(val) => onUpdateStatus(a.id, val)}>
@@ -1078,33 +1171,38 @@ function AppointmentList({
 
               {isDoctor && (
                 <div className="flex items-center gap-2">
-                  {a.patient_id ? (
+                  {a.patient_id && (
                     <Link href={`/pacientes/${a.patient_id}`}>
                       <Button
                         type="button"
                         size="sm"
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs"
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs font-semibold"
                       >
-                        Ver
+                        Expediente
                       </Button>
                     </Link>
-                  ) : (
-                    <Badge
-                      variant="secondary"
-                      className={`shrink-0 border ${STATUS_STYLES[a.status] || ""}`}
-                    >
-                      {STATUS_LABELS[a.status] || a.status}
-                    </Badge>
                   )}
+                  <Badge
+                    variant="secondary"
+                    className={`shrink-0 border font-bold text-xs ${STATUS_STYLES[a.status] || ""}`}
+                  >
+                    {STATUS_LABELS[a.status] || a.status}
+                  </Badge>
                 </div>
               )}
 
-              {isAdmin && (
+              {/* ELIMINAR CITA DE BD (REQUERIMIENTO 3) */}
+              {(isAdmin || isSecretaria) && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => onDelete(a.id)}
+                  onClick={() => {
+                    if (confirm(`¿Eliminar la cita de ${patientFullName}? Se liberará el horario.`)) {
+                      onDelete(a.id)
+                    }
+                  }}
                   className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                  title="Eliminar cita"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -1116,7 +1214,7 @@ function AppointmentList({
       {appointments.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <CalendarDays className="h-10 w-10 text-muted-foreground/30 mb-3" />
-          <p className="text-muted-foreground text-sm">No hay citas para {doctorLabel}.</p>
+          <p className="text-muted-foreground text-sm">No hay citas registradas para {doctorLabel}.</p>
         </div>
       )}
     </div>
@@ -1128,6 +1226,8 @@ function MiniCalendar({
   onDayClick,
   onUpdateStatus,
   onEdit,
+  onConfirm,
+  onDelete,
   canEdit,
   isDoctor,
 }: { 
@@ -1135,6 +1235,8 @@ function MiniCalendar({
   onDayClick: (date: string) => void
   onUpdateStatus: (id: string, status: string) => void
   onEdit: (a: Appointment) => void
+  onConfirm?: (id: string, name: string) => void
+  onDelete: (id: string) => void
   canEdit: boolean
   isDoctor: boolean
 }) {
@@ -1161,11 +1263,12 @@ function MiniCalendar({
 
   const appointmentsByDay: Record<number, Appointment[]> = {}
   appointments.forEach((a) => {
-    const d = new Date(a.scheduled_at)
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      const day = d.getDate()
-      if (!appointmentsByDay[day]) appointmentsByDay[day] = []
-      appointmentsByDay[day].push(a)
+    if (!a.scheduled_at) return
+    const [dPart] = a.scheduled_at.split("T")
+    const [ay, am, ad] = dPart.split("-").map(Number)
+    if (ay === year && am === month + 1) {
+      if (!appointmentsByDay[ad]) appointmentsByDay[ad] = []
+      appointmentsByDay[ad].push(a)
     }
   })
 
@@ -1250,11 +1353,9 @@ function MiniCalendar({
                 size="sm"
                 className="h-8 rounded-lg text-xs"
                 onClick={() => {
-                  const clickDate = new Date(year, month, selectedDay);
-                  const localDateStr = new Date(clickDate.getTime() - (clickDate.getTimezoneOffset() * 60000))
-                    .toISOString()
-                    .split("T")[0];
-                  onDayClick(localDateStr);
+                  const mStr = String(month + 1).padStart(2, "0")
+                  const dStr = String(selectedDay).padStart(2, "0")
+                  onDayClick(`${year}-${mStr}-${dStr}`);
                 }}
               >
                 <Plus className="mr-1.5 h-3 w-3" />
@@ -1265,76 +1366,83 @@ function MiniCalendar({
 
           {appointmentsByDay[selectedDay] && appointmentsByDay[selectedDay].length > 0 ? (
             <div className="space-y-2">
-              {appointmentsByDay[selectedDay].map((a) => (
-                <div key={a.id} className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium text-card-foreground">
-                        {a.patients?.first_name} {a.patients?.last_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(a.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        {" · "}{a.doctor_id === DOCTOR_ID ? "Doctor" : "Doctora"}
-                      </p>
+              {appointmentsByDay[selectedDay].map((a) => {
+                const pName = a.patients
+                  ? `${a.patients.first_name} ${a.patients.last_name}`
+                  : "Paciente"
+                return (
+                  <div key={a.id} className="flex items-center justify-between rounded-xl border border-border p-3">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground">
+                          {pName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatTimeGT(a.scheduled_at)} hrs
+                          {" · "}{a.doctor_id === DOCTOR_ID ? "Dr. Médico" : "Dra. Médica"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
-                    {canEdit ? (
-                      <>
-                        <Select value={a.status} onValueChange={(val) => onUpdateStatus(a.id, val)}>
-                          <SelectTrigger className={`h-8 text-xs border w-[120px] font-semibold ${STATUS_STYLES[a.status] || ""}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pendiente</SelectItem>
-                            <SelectItem value="confirmed">Confirmada</SelectItem>
-                            <SelectItem value="completed">Atendida</SelectItem>
-                            <SelectItem value="cancelled">Cancelada</SelectItem>
-                          </SelectContent>
-                        </Select>
-
+                    
+                    <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                      {isDoctor && (a.status === "pending" || a.status === "pendiente") && (
                         <Button
-                          variant="outline"
                           size="sm"
-                          onClick={() => onEdit(a)}
-                          className="h-8 rounded-lg text-xs"
+                          onClick={() => onConfirm?.(a.id, pName)}
+                          className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs px-2"
                         >
-                          <Edit className="h-3.5 w-3.5 mr-1" />
-                          Editar
+                          <Check className="h-3 w-3 mr-1" /> Confirmar
                         </Button>
-                      </>
-                    ) : isDoctor ? (
-                      a.patient_id ? (
-                        <Link href={`/pacientes/${a.patient_id}`}>
+                      )}
+
+                      {canEdit ? (
+                        <>
+                          <Select value={a.status} onValueChange={(val) => onUpdateStatus(a.id, val)}>
+                            <SelectTrigger className={`h-8 text-xs border w-[120px] font-semibold ${STATUS_STYLES[a.status] || ""}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pendiente</SelectItem>
+                              <SelectItem value="confirmed">Confirmada</SelectItem>
+                              <SelectItem value="completed">Atendida</SelectItem>
+                              <SelectItem value="cancelled">Cancelada</SelectItem>
+                            </SelectContent>
+                          </Select>
+
                           <Button
-                            type="button"
+                            variant="outline"
                             size="sm"
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-xs"
+                            onClick={() => onEdit(a)}
+                            className="h-8 rounded-lg text-xs"
                           >
-                            Ver
+                            <Edit className="h-3.5 w-3.5 mr-1" />
+                            Editar
                           </Button>
-                        </Link>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              if (confirm(`¿Eliminar la cita de ${pName}?`)) onDelete(a.id)
+                            }}
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
                       ) : (
                         <Badge
                           variant="secondary"
-                          className={`shrink-0 border ${STATUS_STYLES[a.status] || ""}`}
+                          className={`shrink-0 border font-bold text-xs ${STATUS_STYLES[a.status] || ""}`}
                         >
                           {STATUS_LABELS[a.status] || a.status}
                         </Badge>
-                      )
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        className={`shrink-0 border ${STATUS_STYLES[a.status] || ""}`}
-                      >
-                        {STATUS_LABELS[a.status] || a.status}
-                      </Badge>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground text-center py-4">No hay citas programadas para este día.</p>

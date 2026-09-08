@@ -16,7 +16,6 @@ import {
   Cross,
   Menu,
   X,
-  AlertCircle,
 } from "lucide-react"
 import { useState } from "react"
 
@@ -29,7 +28,7 @@ const ALL_NAV_ITEMS = [
   { label: "Citas", href: "/citas", icon: CalendarDays, roles: ["admin", "secretaria", "doctor", "doctora"] },
   { label: "Ventas", href: "/ventas", icon: DollarSign, roles: ["admin", "secretaria", "doctor", "doctora"] },
   { label: "Inventario", href: "/inventario", icon: Package, roles: ["admin", "secretaria", "doctor", "doctora"] },
-  { label: "Configuracion", href: "/configuracion", icon: Settings, roles: ["admin"] },
+  { label: "Configuración & Perfil", href: "/configuracion", icon: Settings, roles: ["admin", "secretaria", "doctor", "doctora"] },
 ]
 
 export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { userRole?: Role; displayName?: string }) {
@@ -40,8 +39,8 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
 
   const roleLabel: Record<Role, string> = {
     admin: "Administrador",
-    doctor: "Doctor",
-    doctora: "Doctora",
+    doctor: "Dr. Médico",
+    doctora: "Dra. Médica",
     secretaria: "Secretaría",
   }
 
@@ -49,7 +48,7 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
     admin: "bg-purple-500/20 text-purple-300",
     doctor: "bg-blue-500/20 text-blue-300",
     doctora: "bg-pink-500/20 text-pink-300",
-    secretaria: "bg-pink-500/20 text-pink-300",
+    secretaria: "bg-emerald-500/20 text-emerald-300",
   }
 
   return (
@@ -59,7 +58,7 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
         <div className="flex items-center gap-2">
           <Cross className="h-5 w-5 text-sidebar-primary" />
           <span className="text-base font-bold text-sidebar-foreground">
-            Clinica San Rafael
+            Clínica San Rafael
           </span>
         </div>
         <button
@@ -93,7 +92,7 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
           </div>
           <div>
             <h1 className="text-lg font-bold leading-tight text-sidebar-foreground">
-              Clinica
+              Clínica
             </h1>
             <p className="text-sm font-medium leading-tight text-sidebar-primary">
               San Rafael
@@ -104,7 +103,7 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
         {/* User badge */}
         <div className="mx-4 mb-3">
           <div className={cn("rounded-lg px-3 py-2 text-xs font-medium", roleBadgeColor[userRole])}>
-            {roleLabel[userRole]}{displayName ? ` — ${displayName}` : ""}
+            {roleLabel[userRole] || userRole}{displayName ? ` — ${displayName}` : ""}
           </div>
         </div>
 
@@ -126,7 +125,7 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-sidebar-accent text-sidebar-primary"
+                    ? "bg-sidebar-accent text-sidebar-primary font-bold"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                 )}
               >
@@ -143,7 +142,7 @@ export function ClinicSidebar({ userRole = "secretaria", displayName = "" }: { u
           <form action={logout}>
             <button type="submit" className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground">
               <LogOut className="h-5 w-5 shrink-0" />
-              Cerrar sesion
+              Cerrar sesión
             </button>
           </form>
         </div>

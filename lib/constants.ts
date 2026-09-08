@@ -5,6 +5,7 @@ export type ClinicUser = {
   role: "admin" | "doctor" | "doctora" | "secretaria"
   doctorId?: string
   displayName: string
+  status?: "Activo" | "Inactivo"
 }
 
 export const DOCTOR_ID = "00000000-0000-0000-0000-000000000001"

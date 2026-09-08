@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, Calendar, Clock, Stethoscope, ChevronLeft, ChevronRight, Users, Trash2 } from "lucide-react"
 import { DOCTOR_ID, DOCTORA_ID } from "@/lib/constants"
+import { getTodayGT, formatDateGT } from "@/lib/date-utils"
 
 type Appointment = {
   id: string
@@ -35,13 +36,13 @@ const DEFAULT_HOURS = [
 export function ScheduleGrid({
   appointments,
   onBookSlot,
+  onDeleteAppointment,
 }: {
   appointments: Appointment[]
   onBookSlot: (date: string, time: string, doctorId: string) => void
+  onDeleteAppointment?: (id: string) => void
 }) {
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  )
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayGT())
 
   // Editable time slots for each doctor — start with defaults
   const [doctorHours, setDoctorHours]   = useState<string[]>([...DEFAULT_HOURS])
@@ -55,9 +56,13 @@ export function ScheduleGrid({
   const [editSlot, setEditSlot] = useState<{ idx: number; col: "doctor" | "doctora"; val: string } | null>(null)
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate)
-    d.setDate(d.getDate() + days)
-    setSelectedDate(d.toISOString().split("T")[0])
+    const [y, m, d] = selectedDate.split("-").map(Number)
+    const dateObj = new Date(y, m - 1, d)
+    dateObj.setDate(dateObj.getDate() + days)
+    const nextY = dateObj.getFullYear()
+    const nextM = String(dateObj.getMonth() + 1).padStart(2, "0")
+    const nextD = String(dateObj.getDate()).padStart(2, "0")
+    setSelectedDate(`${nextY}-${nextM}-${nextD}`)
   }
 
   const dayAppointments = appointments.filter((a) => {
@@ -258,16 +263,16 @@ export function ScheduleGrid({
                     </Button>
                     <button
                       type="button"
-                      title="Eliminar lapso"
+                      title="Eliminar lapso de la grilla"
                       onClick={() => removeHour(col, time)}
-                      className="text-muted-foreground/50 hover:text-destructive"
+                      className="text-muted-foreground/50 hover:text-destructive p-1"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Patient list in this slot */}
+                {/* Patient list in this slot with real deletion (Requerimiento 3) */}
                 {count > 0 && (
                   <div className={`space-y-1.5 pt-1 border-t ${c.sepBorder}`}>
                     {apps.map((app) => (
@@ -299,9 +304,29 @@ export function ScheduleGrid({
                             </div>
                           )}
                         </div>
-                        <Badge className={`${c.badgeBg} text-white text-[9px] uppercase px-1.5 py-0.5 shrink-0`}>
-                          {app.status}
-                        </Badge>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge className={`${c.badgeBg} text-white text-[9px] uppercase px-1.5 py-0.5`}>
+                            {app.status}
+                          </Badge>
+
+                          {/* Botón de eliminación real de la cita (Requerimiento 3) */}
+                          <button
+                            type="button"
+                            title="Eliminar cita de este paciente y liberar horario"
+                            onClick={() => {
+                              const pName = app.patients
+                                ? `${app.patients.first_name} ${app.patients.last_name}`
+                                : "este paciente"
+                              if (confirm(`¿Está seguro de eliminar la cita de ${pName} a las ${time} hrs? El horario quedará disponible.`)) {
+                                onDeleteAppointment?.(app.id)
+                              }
+                            }}
+                            className="text-muted-foreground/60 hover:text-destructive p-1 rounded-md transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -331,7 +356,7 @@ export function ScheduleGrid({
           <div>
             <h3 className="text-base font-bold text-card-foreground">Grilla de Horarios</h3>
             <p className="text-xs text-muted-foreground">
-              Múltiples pacientes por lapso · Lapsos personalizables · Edita la hora tocando el tiempo
+              Múltiples pacientes por lapso · Horario en hora de Guatemala · Eliminación y liberación directa de cupos
             </p>
           </div>
         </div>
@@ -355,10 +380,10 @@ export function ScheduleGrid({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
+            onClick={() => setSelectedDate(getTodayGT())}
             className="h-9 text-xs rounded-xl"
           >
-            Hoy
+            Hoy ({formatDateGT(getTodayGT())})
           </Button>
         </div>
       </div>

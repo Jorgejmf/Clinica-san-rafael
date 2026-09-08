@@ -6,14 +6,27 @@
 -- Habilitar extensión UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. TABLA DE USUARIOS DEL SISTEMA
+-- 1. TABLA DE USUARIOS DEL SISTEMA (LEGACY)
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE,
     role TEXT NOT NULL DEFAULT 'secretaria', -- 'admin', 'doctor', 'doctora', 'secretaria'
     doctor_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- 1.1 TABLA DE USUARIOS DEL SISTEMA CON CONTRASEÑAS SEGURAS (NUEVA)
+CREATE TABLE IF NOT EXISTS public.system_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'secretaria', -- 'admin', 'doctor', 'doctora', 'secretaria'
+    doctor_id TEXT,
+    password_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Activo', -- 'Activo', 'Inactivo'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
 -- 2. TABLA DE PACIENTES
@@ -28,9 +41,14 @@ CREATE TABLE IF NOT EXISTS public.patients (
     sexo TEXT,
     phone TEXT,
     email TEXT,
+    direccion TEXT,
     address TEXT,
     notes TEXT,
-    status TEXT DEFAULT 'Activo',
+    status TEXT DEFAULT 'Activo', -- 'Activo', 'Inactivo'
+    estado TEXT DEFAULT 'Activo',
+    alergias TEXT,
+    peso TEXT,
+    talla TEXT,
     digitalizado BOOLEAN DEFAULT false,
     fecha_digitalizacion TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
@@ -42,10 +60,13 @@ CREATE TABLE IF NOT EXISTS public.appointments (
     patient_id UUID REFERENCES public.patients(id) ON DELETE CASCADE,
     doctor_id TEXT NOT NULL,
     scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    duration_minutes INT DEFAULT 30,
     time TEXT,
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending', -- 'pending', 'confirmed', 'completed', 'cancelled'
     estado TEXT,
+    is_emergency BOOLEAN DEFAULT false,
+    notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
@@ -56,6 +77,8 @@ CREATE TABLE IF NOT EXISTS public.medical_records (
     doctor_id TEXT NOT NULL,
     symptoms TEXT,
     motivo_consulta TEXT,
+    gmt TEXT,
+    tx TEXT,
     diagnosis TEXT,
     treatment TEXT,
     conducta_a_seguir TEXT,
@@ -66,7 +89,12 @@ CREATE TABLE IF NOT EXISTS public.medical_records (
     peso TEXT,
     talla TEXT,
     proxima_cita DATE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+    age INT,                -- LEGACY: usar age_at_visit en código nuevo
+    age_at_visit INT,       -- Edad del paciente en la fecha de consulta
+    no_expediente TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_by TEXT
 );
 
 -- 5. TABLA DE DOCUMENTOS Y EXÁMENES ADJUNTOS DE PACIENTES
@@ -166,10 +194,13 @@ CREATE TABLE IF NOT EXISTS public.debtors (
 
 CREATE INDEX IF NOT EXISTS idx_patients_created_at ON public.patients (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_patients_gender ON public.patients (gender);
+CREATE INDEX IF NOT EXISTS idx_patients_phone ON public.patients (phone);
+CREATE INDEX IF NOT EXISTS idx_patients_status ON public.patients (status);
 CREATE INDEX IF NOT EXISTS idx_appointments_scheduled_at ON public.appointments (scheduled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_appointments_patient_id ON public.appointments (patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON public.appointments (doctor_id);
 CREATE INDEX IF NOT EXISTS idx_medical_records_patient_id ON public.medical_records (patient_id);
+CREATE INDEX IF NOT EXISTS idx_medical_records_created_at ON public.medical_records (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_patient_documents_patient_id ON public.patient_documents (patient_id);
 CREATE INDEX IF NOT EXISTS idx_papanicolaou_patient_id ON public.papanicolaou_records (patient_id);
 CREATE INDEX IF NOT EXISTS idx_papanicolaou_status ON public.papanicolaou_records (status);
@@ -179,11 +210,11 @@ CREATE INDEX IF NOT EXISTS idx_products_stock ON public.products (stock);
 CREATE INDEX IF NOT EXISTS idx_debtors_status ON public.debtors (status);
 
 -- =========================================================
--- POLITICAS DE SEGURIDAD (RLS - Row Level Security)
--- Permite lectura y escritura anónima para desarrollo
+-- POLÍTICAS DE SEGURIDAD (RLS - Row Level Security)
 -- =========================================================
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.patients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.medical_records ENABLE ROW LEVEL SECURITY;
@@ -196,6 +227,7 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.debtors ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Permitir todo en users" ON public.users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo en system_users" ON public.system_users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo en patients" ON public.patients FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo en appointments" ON public.appointments FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo en medical_records" ON public.medical_records FOR ALL USING (true) WITH CHECK (true);

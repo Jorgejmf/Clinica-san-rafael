@@ -15,17 +15,31 @@ export async function getCurrentUser(): Promise<ClinicUser | null> {
   }
 }
 
-export function buildClinicUser(username: string): ClinicUser {
-  switch (username.toLowerCase()) {
+export function buildClinicUser(username: string, customDisplay?: string, customRole?: ClinicUser["role"]): ClinicUser {
+  const u = username.toLowerCase().trim()
+  if (customRole) {
+    let docId: string | undefined
+    if (customRole === "doctor") docId = DOCTOR_ID
+    if (customRole === "doctora") docId = DOCTORA_ID
+    return {
+      username: u,
+      role: customRole,
+      doctorId: docId,
+      displayName: customDisplay || u,
+      status: "Activo",
+    }
+  }
+
+  switch (u) {
     case "admin":
-      return { username: "admin", role: "admin", displayName: "Administrador" }
+      return { username: "admin", role: "admin", displayName: customDisplay || "Administrador", status: "Activo" }
     case "doctor":
-      return { username: "doctor", role: "doctor", doctorId: DOCTOR_ID, displayName: "Dr. Médico" }
+      return { username: "doctor", role: "doctor", doctorId: DOCTOR_ID, displayName: customDisplay || "Dr. Médico", status: "Activo" }
     case "doctora":
-      return { username: "doctora", role: "doctora", doctorId: DOCTORA_ID, displayName: "Dra. Médica" }
+      return { username: "doctora", role: "doctora", doctorId: DOCTORA_ID, displayName: customDisplay || "Dra. Médica", status: "Activo" }
     case "secretaria":
-      return { username: "secretaria", role: "secretaria", displayName: "Secretaría" }
+      return { username: "secretaria", role: "secretaria", displayName: customDisplay || "Secretaría", status: "Activo" }
     default:
-      return { username, role: "secretaria", displayName: username }
+      return { username: u, role: "secretaria", displayName: customDisplay || u, status: "Activo" }
   }
 }
