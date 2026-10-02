@@ -3,7 +3,14 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Stethoscope } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Stethoscope, Edit, AlertTriangle, Save, Plus } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { formatDateGT, calculateAgeAtDate, getTodayGT } from "@/lib/date-utils"
 import { parseClinicalRecord } from "@/lib/clinical-utils"
@@ -19,6 +26,8 @@ type Patient = {
   gender?: string
   sexo?: string
   genero?: string
+  alergias?: string
+  allergies?: string
 }
 
 type FichaClinicaFormProps = {
@@ -29,6 +38,7 @@ type FichaClinicaFormProps = {
   isEditing?: boolean
   onCancel: () => void
   onSuccess: () => void
+  onPatientUpdate?: (updatedPatient: any) => void
 }
 
 export function FichaClinicaForm({
@@ -39,8 +49,12 @@ export function FichaClinicaForm({
   isEditing = false,
   onCancel,
   onSuccess,
+  onPatientUpdate,
 }: FichaClinicaFormProps) {
   const [loading, setLoading] = useState(false)
+
+  // Live Patient Allergies in Form
+  const currentAllergies = patient.alergias || patient.allergies || ""
 
   // Parse any encoded fields if editing or pre-filled
   const parsedRecord = initialRecord ? parseClinicalRecord(initialRecord) : null
@@ -300,8 +314,10 @@ export function FichaClinicaForm({
         <div className="flex items-center gap-3">
           <Stethoscope className="h-10 w-10 text-primary" />
           <div>
-            <h2 className="text-primary text-2xl font-bold tracking-tight uppercase">
-              {isEditing ? "Editar Ficha Clínica: Adulto" : "Ficha Clínica: Adulto"}
+            <h2 className="text-primary text-xl md:text-2xl font-bold tracking-tight uppercase">
+              {isEditing
+                ? `Editar Ficha Clínica — ${patient.first_name} ${patient.last_name}`
+                : `Ficha Clínica — ${patient.first_name} ${patient.last_name}`}
             </h2>
             <p className="text-primary text-xs font-semibold tracking-widest uppercase">Clínica Médica Familiar San Rafael</p>
           </div>
@@ -331,6 +347,40 @@ export function FichaClinicaForm({
           </div>
         </div>
       </div>
+
+      {/* Alergias Banner Informativo */}
+      {(() => {
+        const clean = currentAllergies.trim()
+        const lower = clean.toLowerCase()
+        const isNone =
+          lower === "ninguna" ||
+          lower === "niega" ||
+          lower === "sin alergias" ||
+          lower === "no" ||
+          lower === "no conocidas" ||
+          lower === "niega alergias"
+
+        return (
+          <div className="mb-4">
+            {clean && !isNone ? (
+              <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-red-700 dark:text-red-300 print:border-red-500 backdrop-blur-sm">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-red-600 dark:text-red-400">⚠️ ALERGIAS CONOCIDAS:</span>
+                <span className="text-xs font-bold">{clean}</span>
+              </div>
+            ) : clean && isNone ? (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-300 backdrop-blur-sm">
+                <span className="font-bold">✓ Alergias:</span>
+                <span>Sin alergias conocidas</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-sm">
+                <span className="font-semibold">Alergias:</span>
+                <span className="italic">No registradas en expediente</span>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-12 border-b border-primary">

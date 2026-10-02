@@ -49,6 +49,7 @@ import {
   Phone,
   Mail,
   HeartPulse,
+  AlertTriangle,
 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
@@ -70,8 +71,9 @@ export type PatientDocument = {
   patient_id: string
   title: string
   type: "Examen" | "Ecografía" | "Laboratorio" | "Otro"
-  file_name: string
+  file_name?: string | null
   file_url: string
+  description?: string | null
   created_at: string
 }
 
@@ -92,7 +94,7 @@ export function PatientRecord({
   const [patientStatus, setPatientStatus] = useState<string>(initialPatient.status || initialPatient.estado || "Activo")
   const [statusLoading, setStatusLoading] = useState(false)
 
-  // Edit Patient Personal Data Modal State (Requerimiento 8)
+  // Edit Patient Personal Data Modal State
   const [editPatientOpen, setEditPatientOpen] = useState(false)
   const [savingPatient, setSavingPatient] = useState(false)
   const [editFirstName, setEditFirstName] = useState(patient.first_name || "")
@@ -102,7 +104,7 @@ export function PatientRecord({
   const [editPhone, setEditPhone] = useState(patient.phone || "")
   const [editDireccion, setEditDireccion] = useState(patient.direccion || patient.address || "")
   const [editEmail, setEditEmail] = useState(patient.email || "")
-  const [editAlergias, setEditAlergias] = useState(patient.alergias || "")
+  const [editAlergias, setEditAlergias] = useState(patient.alergias || patient.allergies || "")
   const [editNotes, setEditNotes] = useState(patient.notes || "")
   const [editStatus, setEditStatus] = useState(patient.status || patient.estado || "Activo")
 
@@ -121,9 +123,9 @@ export function PatientRecord({
     setEditPhone(patient.phone || "")
     setEditDireccion(patient.address || patient.direccion || "")
     setEditEmail(patient.email || "")
-    setEditAlergias(patient.allergies || patient.alergias || "")
+    setEditAlergias(patient.alergias || patient.allergies || "")
     setEditNotes(patient.notes || patient.emergency_contact || "")
-    setEditStatus(patient.status || "Activo")
+    setEditStatus(patient.status || patient.estado || "Activo")
     setEditPatientOpen(true)
   }
 
@@ -134,23 +136,26 @@ export function PatientRecord({
 
     const cleanFirstName = String(editFirstName ?? '').trim()
     const cleanLastName = String(editLastName ?? '').trim()
-    const cleanPhone = String(editPhone ?? '').trim()
-    const cleanAddress = String(editDireccion ?? '').trim()
-    const cleanEmail = String(editEmail ?? '').trim()
-    const cleanAllergies = String(editAlergias ?? '').trim()
-    const cleanNotes = String(editNotes ?? '').trim()
+    const cleanPhone = String(editPhone ?? '').trim() || null
+    const cleanAddress = String(editDireccion ?? '').trim() || null
+    const cleanEmail = String(editEmail ?? '').trim() || null
+    const cleanAllergies = String(editAlergias ?? '').trim() || null
+    const cleanNotes = String(editNotes ?? '').trim() || null
 
     const updatedData: Record<string, any> = {
       first_name: cleanFirstName || null,
       last_name: cleanLastName || null,
       birth_date: editBirthDate || null,
       gender: editGender || "Femenino",
-      phone: cleanPhone || null,
-      email: cleanEmail || null,
-      address: cleanAddress || null,
-      allergies: cleanAllergies || null,
-      notes: cleanNotes || null,
+      phone: cleanPhone,
+      email: cleanEmail,
+      address: cleanAddress,
+      direccion: cleanAddress,
+      allergies: cleanAllergies,
+      alergias: cleanAllergies,
+      notes: cleanNotes,
       status: editStatus || "Activo",
+      estado: editStatus || "Activo",
       updated_at: new Date().toISOString(),
     }
 
@@ -165,8 +170,6 @@ export function PatientRecord({
       setPatient((prev: any) => ({
         ...prev,
         ...updatedData,
-        direccion: cleanAddress,
-        alergias: cleanAllergies,
       }))
       setPatientStatus(editStatus || "Activo")
       setEditPatientOpen(false)
@@ -216,12 +219,16 @@ export function PatientRecord({
     fetchRecords()
   }, [patient?.id])
 
-  // PDF Document State
+  // Document & Exam State
   const [documents, setDocuments] = useState<PatientDocument[]>([])
+  const [docMode, setDocMode] = useState<"text" | "file">("text")
   const [docTitle, setDocTitle] = useState("")
   const [docType, setDocType] = useState<"Examen" | "Ecografía" | "Laboratorio" | "Otro">("Examen")
+  const [docDate, setDocDate] = useState(new Date().toISOString().split("T")[0])
+  const [docTextResults, setDocTextResults] = useState("")
   const [docFile, setDocFile] = useState<File | null>(null)
   const [loadingPdf, setLoadingPdf] = useState(false)
+  const [viewingTextDoc, setViewingTextDoc] = useState<PatientDocument | null>(null)
 
   const patientCurrentAge = (() => {
     const calc = calculateAgeAtDate(patient.birth_date, new Date())
@@ -230,7 +237,7 @@ export function PatientRecord({
     return "—"
   })()
 
-  // Load patient PDFs
+  // Load patient documents & exams
   useEffect(() => {
     async function loadPdfs() {
       const { data, error } = await supabase
@@ -278,58 +285,90 @@ export function PatientRecord({
     }
   }
 
-  const handleUploadPdf = async (e: React.FormEvent) => {
+  const handleSaveDoc = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!docTitle || !docFile) return
+    if (!docTitle.trim()) return
     setLoadingPdf(true)
 
     try {
-      const fileExt = docFile.name.split(".").pop()
-      const filePath = `${patient.id}/${Date.now()}.${fileExt}`
+      const createdDate = docDate ? new Date(docDate + "T12:00:00Z").toISOString() : new Date().toISOString()
 
-      const { error: uploadError } = await supabase.storage
-        .from("clinical_documents")
-        .upload(filePath, docFile, { upsert: true })
+      if (docMode === "file") {
+        if (!docFile) {
+          alert("Por favor seleccione un archivo PDF o imagen.")
+          setLoadingPdf(false)
+          return
+        }
 
-      if (uploadError) throw uploadError
+        const fileExt = docFile.name.split(".").pop()
+        const filePath = `${patient.id}/${Date.now()}.${fileExt}`
 
-      const { data: urlData } = supabase.storage
-        .from("clinical_documents")
-        .getPublicUrl(filePath)
+        const { error: uploadError } = await supabase.storage
+          .from("clinical_documents")
+          .upload(filePath, docFile, { upsert: true })
 
-      const publicUrl = urlData.publicUrl
+        if (uploadError) throw uploadError
 
-      const newDoc: PatientDocument = {
-        id: `pdf-${Date.now()}`,
-        patient_id: patient.id,
-        title: docTitle,
-        type: docType,
-        file_name: docFile.name,
-        file_url: publicUrl,
-        created_at: new Date().toISOString(),
-      }
+        const { data: urlData } = supabase.storage
+          .from("clinical_documents")
+          .getPublicUrl(filePath)
 
-      const { data, error } = await supabase.from("patient_documents").insert([newDoc]).select()
-      if (error) throw error
+        const publicUrl = urlData.publicUrl
 
-      if (data && data.length > 0) {
-        setDocuments([data[0], ...documents])
+        const newDoc: PatientDocument = {
+          id: `pdf-${Date.now()}`,
+          patient_id: patient.id,
+          title: docTitle.trim(),
+          type: docType,
+          file_name: docFile.name,
+          file_url: publicUrl,
+          description: null,
+          created_at: createdDate,
+        }
+
+        const { data, error } = await supabase.from("patient_documents").insert([newDoc]).select()
+        if (error) throw error
+
+        setDocuments([data && data.length > 0 ? data[0] : newDoc, ...documents])
       } else {
-        setDocuments([newDoc, ...documents])
+        // Transcribed text exam
+        if (!docTextResults.trim()) {
+          alert("Por favor escriba los resultados del examen.")
+          setLoadingPdf(false)
+          return
+        }
+
+        const newDoc: PatientDocument = {
+          id: `doc-txt-${Date.now()}`,
+          patient_id: patient.id,
+          title: docTitle.trim(),
+          type: docType,
+          file_name: "Transcripción directa",
+          file_url: "",
+          description: docTextResults.trim(),
+          created_at: createdDate,
+        }
+
+        const { data, error } = await supabase.from("patient_documents").insert([newDoc]).select()
+        if (error) throw error
+
+        setDocuments([data && data.length > 0 ? data[0] : newDoc, ...documents])
       }
 
       setPdfDialogOpen(false)
       setDocTitle("")
+      setDocTextResults("")
       setDocFile(null)
+      setDocDate(new Date().toISOString().split("T")[0])
     } catch (error: any) {
-      alert("Error al subir archivo: " + error.message)
+      alert("Error al guardar examen: " + error.message)
     } finally {
       setLoadingPdf(false)
     }
   }
 
   const handleDeletePdf = async (id: string) => {
-    if (!confirm("¿Eliminar este documento de exámenes?")) return
+    if (!confirm("¿Eliminar este registro de examen?")) return
     const { error } = await supabase.from("patient_documents").delete().eq("id", id)
     if (error) {
       alert(error.message)
@@ -392,12 +431,45 @@ export function PatientRecord({
                   Expediente #{patient.no_expediente || patient.id.substring(0, 8).toUpperCase()}
                 </span>
                 <span>• Edad actual: <strong className="text-foreground">{patientCurrentAge}</strong></span>
-                {patient.phone && <span>• Tel: <strong className="text-foreground">{patient.phone}</strong></span>}
+                <span>• Tel: <strong className="text-foreground">{patient.phone || "Sin teléfono"}</strong></span>
                 {patient.direccion && (
                   <span className="hidden lg:inline truncate max-w-xs">
                     • <MapPin className="h-3 w-3 text-primary inline mr-0.5" /> {patient.direccion}
                   </span>
                 )}
+                {/* Indicador de Alergias en barra superior */}
+                {(() => {
+                  const rawAllergies = patient.alergias || patient.allergies || ""
+                  const clean = rawAllergies.trim()
+                  const lower = clean.toLowerCase()
+                  const isNone =
+                    lower === "ninguna" ||
+                    lower === "niega" ||
+                    lower === "sin alergias" ||
+                    lower === "no" ||
+                    lower === "no conocidas" ||
+                    lower === "niega alergias"
+
+                  if (clean && !isNone) {
+                    return (
+                      <Badge className="bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30 font-bold text-[10px] backdrop-blur-sm">
+                        ⚠️ Alergias: {clean}
+                      </Badge>
+                    )
+                  } else if (clean && isNone) {
+                    return (
+                      <Badge variant="outline" className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] backdrop-blur-sm">
+                        ✓ Sin alergias
+                      </Badge>
+                    )
+                  } else {
+                    return (
+                      <span className="text-[11px] text-muted-foreground italic">
+                        • Alergias: Sin registrar
+                      </span>
+                    )
+                  }
+                })()}
               </div>
             </div>
           </div>
@@ -454,7 +526,7 @@ export function PatientRecord({
               </DialogTrigger>
 
               <DialogContent className="max-w-[98vw] md:max-w-7xl w-[98vw] p-0 border-none bg-transparent shadow-none max-h-[95vh] overflow-y-auto">
-                <DialogTitle className="sr-only">Nueva Consulta Médica con Expediente Dividido</DialogTitle>
+                <DialogTitle className="sr-only">Nueva Consulta: {patient.first_name} {patient.last_name}</DialogTitle>
                 {dialogOpen && (
                   <div className="bg-background rounded-2xl p-4 md:p-6 shadow-2xl border border-primary/20 space-y-4">
                     <div className="flex items-center justify-between border-b border-border pb-3">
@@ -462,7 +534,7 @@ export function PatientRecord({
                         <Columns2 className="h-5 w-5 text-primary" />
                         <div>
                           <h2 className="text-base font-bold text-foreground">
-                            Nueva Consulta con Vista de Expediente Dividida (50 / 50)
+                            Nueva Consulta: {patient.first_name} {patient.last_name}
                           </h2>
                           <p className="text-xs text-muted-foreground">
                             Escribe la nueva consulta a la izquierda mientras revisas el historial clínico a la derecha sin perder cambios.
@@ -478,6 +550,7 @@ export function PatientRecord({
                           patient={patient}
                           doctorId={userDoctorId || DOCTOR_ID}
                           onCancel={() => setDialogOpen(false)}
+                          onPatientUpdate={(updated) => setPatient((prev: any) => ({ ...prev, ...updated }))}
                           onSuccess={() => {
                             setDialogOpen(false)
                             reloadRecords()
@@ -519,11 +592,11 @@ export function PatientRecord({
       </div>
 
       {/* 2. RESUMEN DEL PACIENTE */}
-      <div className="rounded-2xl border border-primary/20 bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between bg-primary px-5 py-2.5">
+      <div className="rounded-2xl border border-primary/25 bg-card/85 backdrop-blur-xl shadow-lg overflow-hidden transition-all">
+        <div className="flex items-center justify-between bg-gradient-to-r from-primary/95 to-emerald-500/90 text-primary-foreground px-5 py-2.5 shadow-sm">
           <div className="flex items-center gap-2">
-            <Stethoscope className="h-4 w-4 text-primary-foreground" />
-            <span className="text-xs font-bold uppercase tracking-widest text-primary-foreground">
+            <Stethoscope className="h-4 w-4" />
+            <span className="text-xs font-bold uppercase tracking-widest">
               Expediente Clínico del Paciente
             </span>
           </div>
@@ -531,11 +604,29 @@ export function PatientRecord({
             Fecha de Registro: {formatDateGT(patient.created_at)}
           </span>
         </div>
-        <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-5">
+        <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6">
           <SummaryCell label="Nombre Completo" value={`${patient.first_name} ${patient.last_name}`} />
           <SummaryCell label="Edad Actual" value={patientCurrentAge} />
-          <SummaryCell label="Teléfono" value={patient.phone || "—"} />
+          <SummaryCell label="Teléfono" value={patient.phone || "Sin teléfono"} />
           <SummaryCell label="Dirección" value={patient.direccion || patient.address || "—"} icon={<MapPin className="h-3 w-3 text-primary inline mr-1" />} />
+          <SummaryCell
+            label="Alergias Conocidas"
+            value={(() => {
+              const raw = patient.alergias || patient.allergies || ""
+              const clean = raw.trim()
+              const lower = clean.toLowerCase()
+              const isNone =
+                lower === "ninguna" ||
+                lower === "niega" ||
+                lower === "sin alergias" ||
+                lower === "no" ||
+                lower === "no conocidas" ||
+                lower === "niega alergias"
+              if (clean && !isNone) return `⚠️ ${clean}`
+              if (clean && isNone) return "Sin alergias conocidas"
+              return "Sin registrar"
+            })()}
+          />
           <SummaryCell
             label="No. Expediente"
             value={patient.no_expediente || patient.id.substring(0, 8).toUpperCase()}
@@ -583,31 +674,62 @@ export function PatientRecord({
           )}
         </TabsContent>
 
-        {/* PDF TAB (DOCUMENTOS & EXÁMENES - REQUERIMIENTO 11) */}
+        {/* PDF TAB (DOCUMENTOS & EXÁMENES - REQUERIMIENTOS 4 & 11) */}
         <TabsContent value="pdf" className="mt-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-card-foreground">
-              Exámenes, Laboratorios y Ecografías Adjuntas
-            </h3>
+            <div>
+              <h3 className="text-base font-semibold text-card-foreground">
+                Exámenes, Laboratorios y Ecografías del Paciente
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Resultados transcritos en texto y archivos PDF/imágenes adjuntos
+              </p>
+            </div>
             <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="rounded-xl gap-2 bg-primary text-primary-foreground font-semibold">
                   <Upload className="h-4 w-4" />
-                  Adjuntar Nuevo Examen
+                  Agregar Examen
                 </Button>
               </DialogTrigger>
-              <DialogContent className="rounded-2xl sm:max-w-md">
+              <DialogContent className="rounded-2xl sm:max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-primary" />
-                    Adjuntar Examen o Ecografía
+                    Registrar Examen de Paciente
                   </DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleUploadPdf} className="space-y-4 pt-2">
+
+                <form onSubmit={handleSaveDoc} className="space-y-4 pt-2">
+                  {/* Selector de Modo: Transcribir Texto vs Adjuntar Archivo */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Método de Registro</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant={docMode === "text" ? "default" : "outline"}
+                        onClick={() => setDocMode("text")}
+                        className="rounded-xl h-10 text-xs gap-1.5 font-bold"
+                      >
+                        <FileText className="h-4 w-4" />
+                        Transcribir Resultados (Texto)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={docMode === "file" ? "default" : "outline"}
+                        onClick={() => setDocMode("file")}
+                        className="rounded-xl h-10 text-xs gap-1.5 font-bold"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Adjuntar Archivo (PDF / Imagen)
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label>Título / Descripción del Documento</Label>
+                    <Label className="text-xs font-semibold">Identificación / Nombre del Examen *</Label>
                     <Input
-                      placeholder="Ej: Hematología completa, Ecografía renal..."
+                      placeholder="Ej: Hematología completa, Química sanguínea, Ecografía..."
                       required
                       value={docTitle}
                       onChange={(e) => setDocTitle(e.target.value)}
@@ -615,39 +737,74 @@ export function PatientRecord({
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Tipo de Documento</Label>
-                    <Select value={docType} onValueChange={(val: any) => setDocType(val)}>
-                      <SelectTrigger className="h-11 rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Examen">Examen de Laboratorio</SelectItem>
-                        <SelectItem value="Ecografía">Ecografía / Ultrasonido</SelectItem>
-                        <SelectItem value="Laboratorio">Estudio / Radiografía</SelectItem>
-                        <SelectItem value="Otro">Otro Documento</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Tipo de Examen</Label>
+                      <Select value={docType} onValueChange={(val: any) => setDocType(val)}>
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Examen">Examen de Laboratorio</SelectItem>
+                          <SelectItem value="Ecografía">Ecografía / Ultrasonido</SelectItem>
+                          <SelectItem value="Laboratorio">Estudio / Radiografía</SelectItem>
+                          <SelectItem value="Otro">Otro Examen / Documento</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Fecha del Examen</Label>
+                      <Input
+                        type="date"
+                        required
+                        value={docDate}
+                        onChange={(e) => setDocDate(e.target.value)}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Archivo PDF o Imagen</Label>
-                    <Input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      required
-                      onChange={(e) => setDocFile(e.target.files?.[0] || null)}
-                      className="h-11 rounded-xl text-sm"
-                    />
-                  </div>
+                  {docMode === "text" ? (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Resultados Transcritos del Examen *</Label>
+                      <Textarea
+                        rows={6}
+                        placeholder="Escriba los resultados, valores de laboratorio, parámetros e interpretaciones..."
+                        required
+                        value={docTextResults}
+                        onChange={(e) => setDocTextResults(e.target.value)}
+                        className="rounded-xl text-sm leading-relaxed p-3 bg-card"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Archivo PDF o Imagen *</Label>
+                      <Input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        required
+                        onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                        className="h-11 rounded-xl text-sm"
+                      />
+                    </div>
+                  )}
 
-                  <div className="flex justify-end pt-2">
+                  <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setPdfDialogOpen(false)}
+                      className="rounded-xl"
+                    >
+                      Cancelar
+                    </Button>
                     <Button
                       type="submit"
                       disabled={loadingPdf}
                       className="h-11 rounded-xl bg-primary px-6 text-primary-foreground font-bold"
                     >
-                      {loadingPdf ? "Guardando..." : "Subir Documento"}
+                      {loadingPdf ? "Guardando..." : docMode === "text" ? "Guardar Resultados" : "Subir Archivo"}
                     </Button>
                   </div>
                 </form>
@@ -656,85 +813,128 @@ export function PatientRecord({
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition-hover hover:border-primary/50"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-700">
-                      <FileText className="h-6 w-6" />
+            {documents.map((doc) => {
+              const isTranscribed = Boolean(doc.description && !doc.file_url)
+
+              return (
+                <div
+                  key={doc.id}
+                  className="flex flex-col justify-between rounded-2xl border border-border bg-card p-4 shadow-sm transition-hover hover:border-primary/50"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                            isTranscribed
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {isTranscribed ? (
+                            <FlaskConical className="h-6 w-6" />
+                          ) : (
+                            <FileText className="h-6 w-6" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-card-foreground leading-tight">{doc.title}</p>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <Badge variant="outline" className="text-[10px] py-0 h-4">
+                              {doc.type}
+                            </Badge>
+                            {isTranscribed && (
+                              <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-[10px] py-0 h-4 font-bold">
+                                Transcrito
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-sm text-card-foreground leading-tight">{doc.title}</p>
-                      <Badge variant="outline" className="mt-1 text-[10px] py-0 h-4">
-                        {doc.type}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateGT(doc.created_at)}
-                  </span>
-
-                  <div className="flex items-center gap-1">
-                    {/* BOTÓN VER EXÁMENES EN OTRA PESTAÑA (REQUERIMIENTO 11) */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleOpenExamInNewTab(doc.file_url)}
-                      className="h-8 rounded-lg text-xs gap-1 text-primary border-primary/30 hover:bg-primary/10 font-semibold"
-                      title="Abrir examen en nueva pestaña (target=_blank)"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Ver Examen
-                    </Button>
-
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setPreviewPdf(doc)}
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      title="Vista previa integrada"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-
-                    <a href={doc.file_url} download={doc.file_name || "examen.pdf"}>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-blue-600 hover:bg-blue-50"
-                        title="Descargar"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </a>
-
-                    {isAdmin && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleDeletePdf(doc.id)}
-                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    {/* Excerpt if transcribed text */}
+                    {isTranscribed && doc.description && (
+                      <div className="mt-3 rounded-xl bg-muted/40 p-2.5 text-xs text-muted-foreground line-clamp-3 font-mono leading-relaxed border border-border/50">
+                        {doc.description}
+                      </div>
                     )}
                   </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {formatDateGT(doc.created_at)}
+                    </span>
+
+                    <div className="flex items-center gap-1">
+                      {isTranscribed ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setViewingTextDoc(doc)}
+                          className="h-8 rounded-lg text-xs gap-1 text-purple-700 border-purple-300 hover:bg-purple-50 font-bold"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Ver Resultados
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenExamInNewTab(doc.file_url)}
+                            className="h-8 rounded-lg text-xs gap-1 text-primary border-primary/30 hover:bg-primary/10 font-semibold"
+                            title="Abrir examen en nueva pestaña"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Ver
+                          </Button>
+
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setPreviewPdf(doc)}
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            title="Vista previa integrada"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+
+                          <a href={doc.file_url} download={doc.file_name || "examen.pdf"}>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                              title="Descargar"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        </>
+                      )}
+
+                      {isAdmin && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleDeletePdf(doc.id)}
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
 
             {documents.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-12 text-center">
                 <FileText className="h-10 w-10 text-muted-foreground/30 mb-2" />
-                <p className="text-sm font-medium text-muted-foreground">No hay exámenes ni ecografías adjuntas.</p>
-                <p className="text-xs text-muted-foreground/70">Presiona &quot;Adjuntar Nuevo Examen&quot; para subir un archivo.</p>
+                <p className="text-sm font-medium text-muted-foreground">No hay exámenes registrados.</p>
+                <p className="text-xs text-muted-foreground/70">Presiona &quot;Agregar Examen&quot; para transcribir resultados o subir un archivo.</p>
               </div>
             )}
           </div>
@@ -781,6 +981,7 @@ export function PatientRecord({
               initialRecord={editingRecord}
               isEditing={true}
               onCancel={() => setEditingRecord(null)}
+              onPatientUpdate={(updated) => setPatient((prev: any) => ({ ...prev, ...updated }))}
               onSuccess={() => {
                 setEditingRecord(null)
                 reloadRecords()
@@ -849,7 +1050,7 @@ export function PatientRecord({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase text-primary">Teléfono</Label>
+                <Label className="text-xs font-bold uppercase text-primary">Teléfono (Opcional)</Label>
                 <Input
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
@@ -935,6 +1136,70 @@ export function PatientRecord({
         </DialogContent>
       </Dialog>
 
+      {/* MODAL PARA VER RESULTADO DE EXAMEN TRANSCRITO (TEXTO) */}
+      <Dialog open={!!viewingTextDoc} onOpenChange={(open) => !open && setViewingTextDoc(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] p-6 flex flex-col rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-2 border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-purple-600" />
+                <span className="text-base font-bold text-foreground">
+                  {viewingTextDoc?.title}
+                </span>
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs font-bold">
+                  {viewingTextDoc?.type}
+                </Badge>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewingTextDoc && (
+            <div className="space-y-4 pt-2 overflow-y-auto flex-1">
+              <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-xl">
+                <span>Paciente: <strong className="text-foreground">{patient.first_name} {patient.last_name}</strong></span>
+                <span>Fecha: <strong className="text-foreground">{formatDateGT(viewingTextDoc.created_at)}</strong></span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-primary">
+                  Resultados del Examen:
+                </Label>
+                <div className="p-4 rounded-xl border border-border bg-card whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground shadow-xs">
+                  {viewingTextDoc.description}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-3 border-t border-border mt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (viewingTextDoc?.description) {
+                  navigator.clipboard.writeText(
+                    `EXAMEN: ${viewingTextDoc.title}\nFECHA: ${formatDateGT(viewingTextDoc.created_at)}\nPACIENTE: ${patient.first_name} ${patient.last_name}\n\nRESULTADOS:\n${viewingTextDoc.description}`
+                  )
+                  alert("Resultados copiados al portapapeles")
+                }
+              }}
+              className="rounded-xl text-xs gap-1.5"
+            >
+              Copiar Resultados
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => setViewingTextDoc(null)}
+              className="rounded-xl bg-primary text-primary-foreground font-semibold px-6"
+            >
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* PDF PREVIEW MODAL */}
       <Dialog open={!!previewPdf} onOpenChange={(open) => !open && setPreviewPdf(null)}>
         <DialogContent className="max-w-4xl h-[85vh] p-4 flex flex-col">
@@ -968,18 +1233,23 @@ export function PatientRecord({
           </div>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }
 
-function SummaryCell({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+function SummaryCell({ label, value, icon }: { label: string; value: any; icon?: React.ReactNode }) {
+  const strVal = typeof value === "string" ? value : String(value ?? "")
+  const isAlert = strVal.startsWith("⚠️")
   return (
     <div className="px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-primary">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-primary flex items-center">
         {icon}
         {label}
       </p>
-      <p className="mt-0.5 text-sm font-medium text-card-foreground leading-tight truncate">{value}</p>
+      <p className={`mt-0.5 text-sm leading-tight truncate ${isAlert ? "text-red-600 dark:text-red-400 font-bold" : "text-card-foreground font-medium"}`}>
+        {strVal || "—"}
+      </p>
     </div>
   )
 }

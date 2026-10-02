@@ -118,19 +118,48 @@ type ChildControl = {
   tallaGrado: "Leve" | "Moderado" | "Severo" | "N/A"
 }
 
-// WHO / CDC Standard Normal Reference Percentile Curve (P50 Average Standard)
+// WHO / CDC Standard Normal Reference Curve Table (P50 Average Standard)
 const STANDARD_GROWTH_REFERENCE = [
-  { edadMeses: 0, pesoNormalLbs: 7.3, tallaNormalCm: 50 },
-  { edadMeses: 3, pesoNormalLbs: 14.1, tallaNormalCm: 61 },
-  { edadMeses: 6, pesoNormalLbs: 17.5, tallaNormalCm: 67 },
-  { edadMeses: 9, pesoNormalLbs: 19.8, tallaNormalCm: 71 },
-  { edadMeses: 12, pesoNormalLbs: 21.8, tallaNormalCm: 75 },
-  { edadMeses: 18, pesoNormalLbs: 24.5, tallaNormalCm: 82 },
-  { edadMeses: 24, pesoNormalLbs: 27.5, tallaNormalCm: 87 },
-  { edadMeses: 36, pesoNormalLbs: 31.5, tallaNormalCm: 96 },
-  { edadMeses: 48, pesoNormalLbs: 36.0, tallaNormalCm: 103 },
-  { edadMeses: 60, pesoNormalLbs: 40.5, tallaNormalCm: 110 },
+  { edadMeses: 0, pesoNormalLbs: 7.3, tallaNormalCm: 50.0 },
+  { edadMeses: 1, pesoNormalLbs: 9.9, tallaNormalCm: 54.7 },
+  { edadMeses: 2, pesoNormalLbs: 12.3, tallaNormalCm: 58.4 },
+  { edadMeses: 3, pesoNormalLbs: 14.1, tallaNormalCm: 61.4 },
+  { edadMeses: 4, pesoNormalLbs: 15.4, tallaNormalCm: 63.9 },
+  { edadMeses: 6, pesoNormalLbs: 17.5, tallaNormalCm: 67.6 },
+  { edadMeses: 9, pesoNormalLbs: 19.8, tallaNormalCm: 72.0 },
+  { edadMeses: 12, pesoNormalLbs: 21.8, tallaNormalCm: 75.7 },
+  { edadMeses: 15, pesoNormalLbs: 23.1, tallaNormalCm: 79.1 },
+  { edadMeses: 18, pesoNormalLbs: 24.5, tallaNormalCm: 82.3 },
+  { edadMeses: 24, pesoNormalLbs: 27.5, tallaNormalCm: 87.8 },
+  { edadMeses: 36, pesoNormalLbs: 31.5, tallaNormalCm: 96.1 },
+  { edadMeses: 48, pesoNormalLbs: 36.0, tallaNormalCm: 103.3 },
+  { edadMeses: 60, pesoNormalLbs: 40.5, tallaNormalCm: 110.0 },
+  { edadMeses: 72, pesoNormalLbs: 45.0, tallaNormalCm: 115.5 },
+  { edadMeses: 84, pesoNormalLbs: 50.0, tallaNormalCm: 121.0 },
+  { edadMeses: 96, pesoNormalLbs: 56.0, tallaNormalCm: 127.0 },
+  { edadMeses: 108, pesoNormalLbs: 62.0, tallaNormalCm: 132.0 },
+  { edadMeses: 120, pesoNormalLbs: 69.0, tallaNormalCm: 138.0 },
+  { edadMeses: 132, pesoNormalLbs: 76.0, tallaNormalCm: 143.0 },
+  { edadMeses: 144, pesoNormalLbs: 85.0, tallaNormalCm: 149.0 },
 ]
+
+function getStandardGrowth(edadMeses: number) {
+  if (edadMeses <= 0) return { pesoLbs: 7.3, tallaCm: 50.0 }
+  if (edadMeses >= 144) return { pesoLbs: 85.0, tallaCm: 149.0 }
+
+  for (let i = 0; i < STANDARD_GROWTH_REFERENCE.length - 1; i++) {
+    const curr = STANDARD_GROWTH_REFERENCE[i]
+    const next = STANDARD_GROWTH_REFERENCE[i + 1]
+    if (edadMeses >= curr.edadMeses && edadMeses <= next.edadMeses) {
+      if (curr.edadMeses === next.edadMeses) return { pesoLbs: curr.pesoNormalLbs, tallaCm: curr.tallaNormalCm }
+      const ratio = (edadMeses - curr.edadMeses) / (next.edadMeses - curr.edadMeses)
+      const pesoLbs = Number((curr.pesoNormalLbs + ratio * (next.pesoNormalLbs - curr.pesoNormalLbs)).toFixed(1))
+      const tallaCm = Number((curr.tallaNormalCm + ratio * (next.tallaNormalCm - curr.tallaNormalCm)).toFixed(1))
+      return { pesoLbs, tallaCm }
+    }
+  }
+  return { pesoLbs: 40.5, tallaCm: 110.0 }
+}
 
 export function NinosView({
   patients = [],
@@ -172,21 +201,86 @@ export function NinosView({
 
   const [controls, setControls] = useState<ChildControl[]>([])
 
-  // Load child controls
+  // Load child controls with fallback to medical records and localStorage
   useEffect(() => {
     if (!selectedChild) return
     async function loadData() {
+      // 1. Try Supabase pediatric_records
       const { data, error } = await supabase
         .from("pediatric_records")
         .select("*")
         .eq("patient_id", selectedChild!.id)
 
-      if (!error && data && data.length > 0 && data[0].controls && data[0].controls.length > 0) {
+      if (!error && data && data.length > 0 && Array.isArray(data[0].controls) && data[0].controls.length > 0) {
         setControls(data[0].controls)
-      } else {
-        if (error) console.error(error)
-        setControls([createEmptyChildControl()])
+        try {
+          localStorage.setItem(`pediatric_records_${selectedChild!.id}`, JSON.stringify(data[0].controls))
+        } catch {}
+        return
       }
+
+      // 2. Try localStorage fallback
+      try {
+        const local = localStorage.getItem(`pediatric_records_${selectedChild!.id}`)
+        if (local) {
+          const parsed = JSON.parse(local)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setControls(parsed)
+            return
+          }
+        }
+      } catch {}
+
+      // 3. Try medical_records from consultations to connect growth measurements
+      try {
+        const { data: medRecs } = await supabase
+          .from("medical_records")
+          .select("*")
+          .eq("patient_id", selectedChild!.id)
+          .order("created_at", { ascending: true })
+
+        if (medRecs && medRecs.length > 0) {
+          const generatedControls: ChildControl[] = medRecs
+            .filter((r) => r.peso || r.talla)
+            .map((r, idx) => {
+              const numPeso = parseFloat(String(r.peso || "").replace(/[^0-9.]/g, "")) || 0
+              let numTalla = parseFloat(String(r.talla || "").replace(/[^0-9.]/g, "")) || 0
+              if (numTalla > 0 && numTalla < 3) numTalla = Math.round(numTalla * 100)
+              
+              let ageMeses = idx * 6
+              if (selectedChild!.birth_date && r.created_at) {
+                const bDate = new Date(selectedChild!.birth_date)
+                const vDate = new Date(r.created_at)
+                const diffMonths = Math.max(0, (vDate.getFullYear() - bDate.getFullYear()) * 12 + (vDate.getMonth() - bDate.getMonth()))
+                ageMeses = diffMonths
+              } else if (r.age_at_visit !== undefined && r.age_at_visit !== null) {
+                ageMeses = Number(r.age_at_visit) * 12
+              } else if (r.age !== undefined && r.age !== null) {
+                ageMeses = Number(r.age) * 12
+              }
+
+              return {
+                id: `cctrl-med-${r.id || idx}`,
+                fecha: r.created_at ? r.created_at.split("T")[0] : new Date().toISOString().split("T")[0],
+                edadMeses: ageMeses,
+                pesoLbs: numPeso,
+                tallaCm: numTalla,
+                nutricionTipo: "Normo peso",
+                nutricionGrado: "N/A",
+                tallaTipo: "Talla normal",
+                tallaGrado: "N/A",
+              }
+            })
+
+          if (generatedControls.length > 0) {
+            setControls(generatedControls)
+            return
+          }
+        }
+      } catch {}
+
+      // 4. Default initial empty control
+      setControls([createEmptyChildControl()])
     }
     loadData()
   }, [selectedChild])
@@ -194,17 +288,31 @@ export function NinosView({
   const saveControls = async (newControls: ChildControl[]) => {
     setControls(newControls) // optimistic update
     if (selectedChild) {
-      const { error } = await supabase.from("pediatric_records").upsert({
+      try {
+        localStorage.setItem(`pediatric_records_${selectedChild.id}`, JSON.stringify(newControls))
+      } catch {}
+
+      const fullName = `${selectedChild.first_name} ${selectedChild.last_name}`
+      const payload: Record<string, any> = {
         id: `ped-${selectedChild.id}`,
         patient_id: selectedChild.id,
-        patient_name: `${selectedChild.first_name} ${selectedChild.last_name}`,
+        child_name: fullName,
+        patient_name: fullName,
         controls: newControls,
         updated_at: new Date().toISOString(),
-      }).select()
+      }
+
+      const { error } = await supabase.from("pediatric_records").upsert(payload)
       
       if (error) {
-        console.error(error)
-        alert(error.message)
+        console.error("Error saving pediatric controls:", error)
+        if (error.message?.includes("patient_name")) {
+          delete payload.patient_name
+          await supabase.from("pediatric_records").upsert(payload)
+        } else if (error.message?.includes("child_name")) {
+          delete payload.child_name
+          await supabase.from("pediatric_records").upsert(payload)
+        }
       }
     }
   }
@@ -242,7 +350,7 @@ export function NinosView({
         next.nutricionGrado = "N/A"
       }
       if (field === "tallaTipo" && val === "Talla normal") {
-      next.tallaGrado = "N/A"
+        next.tallaGrado = "N/A"
       }
       return next
     })
@@ -334,17 +442,34 @@ export function NinosView({
     }
   }
 
-  // Generate chart data comparing child's points with WHO reference standard
-  const chartData = STANDARD_GROWTH_REFERENCE.map((ref) => {
-    const childMatch = controls.find((c) => Math.abs(c.edadMeses - ref.edadMeses) <= 1.5)
-    return {
-      edadMeses: `${ref.edadMeses} m`,
-      "Peso Niño (lbs)": childMatch ? childMatch.pesoLbs : null,
-      "Talla Niño (cm)": childMatch ? childMatch.tallaCm : null,
-      "Peso Normal Estándar (lbs)": ref.pesoNormalLbs,
-      "Talla Normal Estándar (cm)": ref.tallaNormalCm,
-    }
-  })
+  // Generate chart data comparing all child's points with WHO reference standard curve
+  const chartData = useMemo(() => {
+    const validControls = controls.filter(
+      (c) => (c.pesoLbs && Number(c.pesoLbs) > 0) || (c.tallaCm && Number(c.tallaCm) > 0) || Number(c.edadMeses) >= 0
+    )
+    const childAges = validControls.map((c) => Number(c.edadMeses)).filter((a) => !isNaN(a))
+    const maxAge = Math.min(144, Math.max(60, ...childAges, 0))
+
+    const milestoneAges = STANDARD_GROWTH_REFERENCE.map((r) => r.edadMeses).filter((age) => age <= maxAge)
+    const allAges = Array.from(new Set([...milestoneAges, ...childAges])).sort((a, b) => a - b)
+
+    return allAges.map((age) => {
+      // Find matching child control for this exact age
+      const childMatch = validControls.find((c) => Number(c.edadMeses) === age)
+      const std = getStandardGrowth(age)
+      const pesoVal = childMatch && Number(childMatch.pesoLbs) > 0 ? Number(childMatch.pesoLbs) : null
+      const tallaVal = childMatch && Number(childMatch.tallaCm) > 0 ? Number(childMatch.tallaCm) : null
+
+      return {
+        edadMesesNum: age,
+        edadMeses: `${age} m`,
+        "Peso Niño (lbs)": pesoVal,
+        "Talla Niño (cm)": tallaVal,
+        "Peso Normal Estándar (lbs)": std.pesoLbs,
+        "Talla Normal Estándar (cm)": std.tallaCm,
+      }
+    })
+  }, [controls])
 
   return (
     <div className="space-y-6">

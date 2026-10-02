@@ -43,17 +43,23 @@ export function AddPatientForm() {
     setLoading(true)
     setErrorMsg("")
 
+    const cleanAllergies = formData.alergias.trim() || null
+    const cleanPhone = formData.phone.trim() || null
+    const cleanAddress = formData.direccion.trim() || null
+
     const newPatientData: any = {
       first_name: formData.first_name.trim(),
       last_name: formData.last_name.trim(),
       age: formData.age ? parseInt(formData.age, 10) : null,
       birth_date: formData.birth_date || null,
       gender: formData.gender,
-      phone: formData.phone.trim(),
-      direccion: formData.direccion.trim() || null,
+      phone: cleanPhone,
+      direccion: cleanAddress,
+      address: cleanAddress,
       talla: formData.talla ? formData.talla.trim() : null,
       peso: formData.peso ? formData.peso.trim() : null,
-      alergias: formData.alergias.trim() || null,
+      alergias: cleanAllergies,
+      allergies: cleanAllergies,
       status: "Activo",
     }
 
@@ -165,13 +171,12 @@ export function AddPatientForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone" className="text-sm font-bold text-card-foreground">
-              Teléfono *
+              Teléfono (Opcional)
             </Label>
             <Input
               id="phone"
               type="tel"
               placeholder="Ej: 5222-0371"
-              required
               value={formData.phone}
               onChange={handleChange}
               className="h-11 rounded-xl text-base"

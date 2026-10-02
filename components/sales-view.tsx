@@ -150,6 +150,16 @@ function ProductAutocomplete({
   )
 }
 
+type SaleItem = {
+  id: string
+  type: "product" | "custom"
+  productId?: string
+  description: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+}
+
 export function SalesView({
   initialTransactions,
   inventory = [],
@@ -174,41 +184,109 @@ export function SalesView({
   const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null)
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
-  // Sale form states
-  const [saleType, setSaleType] = useState<"product" | "custom">("product")
-  const [selectedProductId, setSelectedProductId] = useState("")
-  const [saleQuantity, setSaleQuantity] = useState(1)
+  // Helper create empty item
+  const createEmptySaleItem = (type: "product" | "custom" = "custom"): SaleItem => ({
+    id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    type,
+    productId: "",
+    description: type === "custom" ? "Consulta médica" : "",
+    quantity: 1,
+    unitPrice: 0,
+    subtotal: 0,
+  })
+
+  // Sale form states with multiple line items
   const [saleDoctor, setSaleDoctor] = useState<"doctor" | "doctora" | "general">("general")
   const [salePaciente, setSalePaciente] = useState("")
-  const [saleMonto, setSaleMonto] = useState("")
-  const [saleDescripcion, setSaleDescripcion] = useState("")
   const [saleFecha, setSaleFecha] = useState(new Date().toISOString().split("T")[0])
+  const [saleItems, setSaleItems] = useState<SaleItem[]>([createEmptySaleItem("custom")])
 
   // Expense form
   const [expMonto, setExpMonto] = useState("")
   const [expDescripcion, setExpDescripcion] = useState("")
   const [expFecha, setExpFecha] = useState(new Date().toISOString().split("T")[0])
 
-  // Handle Product Selection change in Sale Form
-  const handleProductChange = (prodId: string) => {
-    setSelectedProductId(prodId)
-    const prod = inventory.find((p) => p.id === prodId)
-    if (prod) {
-      const price = prod.price || 0
-      setSaleMonto((price * saleQuantity).toString())
-      setSaleDescripcion(`Venta de Medicamento: ${prod.name} (Cant: ${saleQuantity})`)
-    }
+  // Sale item operations
+  const handleAddSaleItem = (type: "product" | "custom" = "custom") => {
+    setSaleItems((prev) => [...prev, createEmptySaleItem(type)])
   }
 
-  const handleQuantityChange = (qty: number) => {
-    setSaleQuantity(qty)
-    const prod = inventory.find((p) => p.id === selectedProductId)
-    if (prod) {
-      const price = prod.price || 0
-      setSaleMonto((price * qty).toString())
-      setSaleDescripcion(`Venta de Medicamento: ${prod.name} (Cant: ${qty})`)
-    }
+  const handleRemoveSaleItem = (id: string) => {
+    setSaleItems((prev) => {
+      if (prev.length <= 1) return [createEmptySaleItem("custom")]
+      return prev.filter((item) => item.id !== id)
+    })
   }
+
+  const handleUpdateItemType = (id: string, type: "product" | "custom") => {
+    setSaleItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        return {
+          ...item,
+          type,
+          productId: "",
+          description: type === "custom" ? "Consulta médica" : "",
+          unitPrice: 0,
+          subtotal: 0,
+        }
+      })
+    )
+  }
+
+  const handleUpdateItemProduct = (id: string, prodId: string) => {
+    const prod = inventory.find((p) => p.id === prodId)
+    setSaleItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const price = prod ? prod.price || 0 : 0
+        const qty = item.quantity || 1
+        return {
+          ...item,
+          productId: prodId,
+          description: prod ? prod.name : "",
+          unitPrice: price,
+          subtotal: price * qty,
+        }
+      })
+    )
+  }
+
+  const handleUpdateItemQuantity = (id: string, qty: number) => {
+    const safeQty = Math.max(1, qty)
+    setSaleItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        return {
+          ...item,
+          quantity: safeQty,
+          subtotal: Number((safeQty * (item.unitPrice || 0)).toFixed(2)),
+        }
+      })
+    )
+  }
+
+  const handleUpdateItemPrice = (id: string, price: number) => {
+    const safePrice = Math.max(0, price)
+    setSaleItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        return {
+          ...item,
+          unitPrice: safePrice,
+          subtotal: Number(((item.quantity || 1) * safePrice).toFixed(2)),
+        }
+      })
+    )
+  }
+
+  const handleUpdateItemDescription = (id: string, desc: string) => {
+    setSaleItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, description: desc } : item))
+    )
+  }
+
+  const saleTotal = saleItems.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0)
 
   // Calendar logic & month/year extraction
   const year = currentMonth.getFullYear()
@@ -239,30 +317,62 @@ export function SalesView({
 
   const handleAddSale = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (saleItems.length === 0) {
+      alert("Debe agregar al menos un concepto a la venta.")
+      return
+    }
+
+    // Check descriptions and stock
+    for (const item of saleItems) {
+      if (!item.description.trim()) {
+        alert("Todos los conceptos deben tener una descripción o medicamento seleccionado.")
+        return
+      }
+      if (item.type === "product" && item.productId) {
+        const prod = inventory.find((p) => p.id === item.productId)
+        if (prod && prod.stock < item.quantity) {
+          const proceed = confirm(
+            `El medicamento "${prod.name}" solo tiene ${prod.stock} unidades en stock (solicitado: ${item.quantity}). ¿Desea continuar de todos modos?`
+          )
+          if (!proceed) return
+        }
+      }
+    }
+
     setLoading(true)
 
     let docTag = ""
     if (saleDoctor === "doctor") docTag = "[Dr. Médico]"
     else if (saleDoctor === "doctora") docTag = "[Dra. Médica]"
 
-    const fullCategory = `${docTag} ${salePaciente ? `[Paciente: ${salePaciente}] ` : ""}${saleDescripcion}`.trim()
+    const itemsSummary = saleItems
+      .map((i) => {
+        const qtyLabel = i.quantity > 1 ? ` (Cant: ${i.quantity})` : ""
+        return `${i.description}${qtyLabel} [Q${i.subtotal.toFixed(2)}]`
+      })
+      .join(" + ")
+
+    const fullCategory = `${docTag} ${salePaciente ? `[Paciente: ${salePaciente.trim()}] ` : ""}${itemsSummary}`.trim()
     const dateObj = new Date(saleFecha)
 
     const newTx = {
       type: "income" as const,
-      amount: parseFloat(saleMonto),
+      amount: saleTotal,
       category: fullCategory,
       created_at: isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString(),
     }
 
     const { error } = await supabase.from("transactions").insert([newTx])
 
-    // If product sale, deduct quantity from inventory!
-    if (saleType === "product" && selectedProductId) {
-      const prod = inventory.find((p) => p.id === selectedProductId)
-      if (prod) {
-        const newStock = Math.max(0, prod.stock - saleQuantity)
-        await supabase.from("products").update({ stock: newStock }).eq("id", selectedProductId)
+    // Deduct stock for all product items
+    for (const item of saleItems) {
+      if (item.type === "product" && item.productId) {
+        const prod = inventory.find((p) => p.id === item.productId)
+        if (prod) {
+          const newStock = Math.max(0, prod.stock - item.quantity)
+          await supabase.from("products").update({ stock: newStock }).eq("id", item.productId)
+        }
       }
     }
 
@@ -270,10 +380,7 @@ export function SalesView({
     if (!error) {
       setSaleDialogOpen(false)
       setSalePaciente("")
-      setSaleMonto("")
-      setSaleDescripcion("")
-      setSelectedProductId("")
-      setSaleQuantity(1)
+      setSaleItems([createEmptySaleItem("custom")])
       setSaleFecha(new Date().toISOString().split("T")[0])
       router.refresh()
     } else {
@@ -473,147 +580,272 @@ export function SalesView({
                       Registrar Venta
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="rounded-2xl sm:max-w-lg">
+                  <DialogContent className="rounded-2xl sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Nueva Venta</DialogTitle>
+                      <DialogTitle className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-primary" />
+                        Registrar Venta (Múltiples Conceptos)
+                      </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAddSale} className="space-y-4 pt-2">
-                      {/* Doctor selection with Color coding */}
-                      <div className="space-y-2">
-                        <Label>Asignar Venta a Médico / General</Label>
-                        <Select value={saleDoctor} onValueChange={(val: any) => setSaleDoctor(val)}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="general">Ninguno / General</SelectItem>
-                            <SelectItem value="doctor">
-                              <div className="flex items-center gap-2 text-blue-600 font-semibold">
-                                <Stethoscope className="h-4 w-4" />
-                                Dr. Médico (Color Azul)
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="doctora">
-                              <div className="flex items-center gap-2 text-pink-600 font-semibold">
-                                <Stethoscope className="h-4 w-4" />
-                                Dra. Médica (Color Rosado)
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Sale Mode: Inventory Product vs Custom */}
-                      <div className="space-y-2">
-                        <Label>Tipo de Venta</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant={saleType === "product" ? "default" : "outline"}
-                            onClick={() => setSaleType("product")}
-                            className="rounded-xl h-10 text-xs gap-1.5"
-                          >
-                            <Package className="h-3.5 w-3.5" />
-                            Medicamento (Inventario)
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={saleType === "custom" ? "default" : "outline"}
-                            onClick={() => setSaleType("custom")}
-                            className="rounded-xl h-10 text-xs gap-1.5"
-                          >
-                            <DollarSign className="h-3.5 w-3.5" />
-                            Consulta / Servicio
-                          </Button>
+                      {/* Doctor, Paciente y Fecha */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Asignar a Médico</Label>
+                          <Select value={saleDoctor} onValueChange={(val: any) => setSaleDoctor(val)}>
+                            <SelectTrigger className="h-10 rounded-xl text-xs font-semibold">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="general">Ninguno / General</SelectItem>
+                              <SelectItem value="doctor">
+                                <span className="text-blue-600 font-semibold">Dr. Médico (Azul)</span>
+                              </SelectItem>
+                              <SelectItem value="doctora">
+                                <span className="text-pink-600 font-semibold">Dra. Médica (Rosado)</span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
-                      </div>
 
-                      {/* Product Selector if Product Mode */}
-                      {saleType === "product" ? (
-                        <div className="space-y-3 bg-muted/30 p-3 rounded-xl border border-border">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Buscar Medicamento del Inventario</Label>
-                            <ProductAutocomplete
-                              inventory={inventory}
-                              selectedProductId={selectedProductId}
-                              onSelect={handleProductChange}
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                              <Label className="text-xs font-semibold">Cantidad</Label>
-                              <Input
-                                type="number"
-                                min="1"
-                                value={saleQuantity}
-                                onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-                                className="h-10 rounded-xl bg-card"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-xs font-semibold">Monto Total (Q)</Label>
-                              <Input
-                                type="number"
-                                readOnly
-                                value={saleMonto}
-                                className="h-10 rounded-xl bg-muted font-bold text-emerald-700"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <Label>Monto (Q)</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Paciente (Opcional)</Label>
                           <Input
-                            type="number"
-                            placeholder="0.00"
-                            required
-                            min="0"
-                            step="0.01"
-                            value={saleMonto}
-                            onChange={(e) => setSaleMonto(e.target.value)}
-                            className="h-11 rounded-xl"
+                            placeholder="Nombre del paciente"
+                            value={salePaciente}
+                            onChange={(e) => setSalePaciente(e.target.value)}
+                            className="h-10 rounded-xl text-xs"
                           />
                         </div>
-                      )}
 
-                      <div className="space-y-2">
-                        <Label>Paciente (Opcional)</Label>
-                        <Input
-                          placeholder="Nombre del paciente"
-                          value={salePaciente}
-                          onChange={(e) => setSalePaciente(e.target.value)}
-                          className="h-11 rounded-xl"
-                        />
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Fecha</Label>
+                          <Input
+                            type="date"
+                            required
+                            value={saleFecha}
+                            onChange={(e) => setSaleFecha(e.target.value)}
+                            className="h-10 rounded-xl text-xs"
+                          />
+                        </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Descripción</Label>
-                        <Input
-                          placeholder="Descripción del servicio o venta"
-                          required
-                          value={saleDescripcion}
-                          onChange={(e) => setSaleDescripcion(e.target.value)}
-                          className="h-11 rounded-xl"
-                        />
+                      {/* Header de Conceptos / Renglones */}
+                      <div className="border-t border-border pt-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                          <Label className="text-sm font-bold text-foreground">
+                            Conceptos de la Venta ({saleItems.length})
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddSaleItem("custom")}
+                              className="h-8 rounded-lg text-xs gap-1.5 font-semibold border-primary/30 text-primary hover:bg-primary/10"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              + Consulta / Servicio
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddSaleItem("product")}
+                              className="h-8 rounded-lg text-xs gap-1.5 font-semibold border-purple-300 text-purple-700 hover:bg-purple-50"
+                            >
+                              <Package className="h-3.5 w-3.5" />
+                              + Medicamento
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Lista de Renglones */}
+                        <div className="space-y-3">
+                          {saleItems.map((item, idx) => {
+                            const isProd = item.type === "product"
+                            const selectedProd = isProd ? inventory.find((p) => p.id === item.productId) : null
+
+                            return (
+                              <div
+                                key={item.id}
+                                className="rounded-xl border border-border bg-card p-3 shadow-xs space-y-2.5 transition-all hover:border-primary/40"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-extrabold text-muted-foreground">
+                                      {idx + 1}
+                                    </span>
+                                    <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateItemType(item.id, "custom")}
+                                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                                          !isProd
+                                            ? "bg-white text-primary shadow-xs font-bold"
+                                            : "text-muted-foreground hover:text-foreground"
+                                        }`}
+                                      >
+                                        Consulta / Servicio
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateItemType(item.id, "product")}
+                                        className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                                          isProd
+                                            ? "bg-purple-600 text-white shadow-xs font-bold"
+                                            : "text-muted-foreground hover:text-foreground"
+                                        }`}
+                                      >
+                                        Medicamento (Inventario)
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {saleItems.length > 1 && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleRemoveSaleItem(item.id)}
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                      title="Quitar este concepto"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+
+                                {isProd ? (
+                                  <div className="space-y-2">
+                                    <div>
+                                      <ProductAutocomplete
+                                        inventory={inventory}
+                                        selectedProductId={item.productId || ""}
+                                        onSelect={(prodId) => handleUpdateItemProduct(item.id, prodId)}
+                                      />
+                                      {selectedProd && (
+                                        <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">
+                                          <span>Stock: <strong>{selectedProd.stock}</strong> unidades</span>
+                                          <span>•</span>
+                                          <span>Precio catálogo: <strong>Q{(selectedProd.price || 0).toFixed(2)}</strong></span>
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground font-semibold">Cantidad</Label>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          value={item.quantity}
+                                          onChange={(e) =>
+                                            handleUpdateItemQuantity(item.id, parseInt(e.target.value) || 1)
+                                          }
+                                          className="h-9 text-xs font-bold rounded-lg"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground font-semibold">Precio Unit. (Q)</Label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={item.unitPrice}
+                                          onChange={(e) =>
+                                            handleUpdateItemPrice(item.id, parseFloat(e.target.value) || 0)
+                                          }
+                                          className="h-9 text-xs font-bold rounded-lg"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground font-semibold">Subtotal (Q)</Label>
+                                        <div className="h-9 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-800 font-extrabold text-xs border border-emerald-200">
+                                          Q{item.subtotal.toFixed(2)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                    <div className="sm:col-span-6">
+                                      <Label className="text-[10px] text-muted-foreground font-semibold">Descripción del Concepto</Label>
+                                      <Input
+                                        placeholder="Ej: Consulta médica general, Ultrasonido..."
+                                        value={item.description}
+                                        onChange={(e) => handleUpdateItemDescription(item.id, e.target.value)}
+                                        className="h-9 text-xs font-semibold rounded-lg"
+                                        required
+                                      />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                      <Label className="text-[10px] text-muted-foreground font-semibold">Cant.</Label>
+                                      <Input
+                                        type="number"
+                                        min="1"
+                                        value={item.quantity}
+                                        onChange={(e) =>
+                                          handleUpdateItemQuantity(item.id, parseInt(e.target.value) || 1)
+                                        }
+                                        className="h-9 text-xs font-bold rounded-lg text-center"
+                                      />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                      <Label className="text-[10px] text-muted-foreground font-semibold">Precio (Q)</Label>
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={item.unitPrice || ""}
+                                        onChange={(e) =>
+                                          handleUpdateItemPrice(item.id, parseFloat(e.target.value) || 0)
+                                        }
+                                        className="h-9 text-xs font-bold rounded-lg"
+                                        required
+                                      />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                      <Label className="text-[10px] text-muted-foreground font-semibold">Subtotal</Label>
+                                      <div className="h-9 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-800 font-extrabold text-xs border border-emerald-200">
+                                        Q{item.subtotal.toFixed(2)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Fecha</Label>
-                        <Input
-                          type="date"
-                          required
-                          value={saleFecha}
-                          onChange={(e) => setSaleFecha(e.target.value)}
-                          className="h-11 rounded-xl"
-                        />
-                      </div>
+                      {/* Total Bar and Submit */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4 mt-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Venta:</span>
+                          <span className="text-xl font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                            Q{saleTotal.toFixed(2)}
+                          </span>
+                        </div>
 
-                      <div className="flex justify-end pt-2">
-                        <Button type="submit" disabled={loading} className="h-11 rounded-xl bg-primary px-6 text-primary-foreground hover:bg-primary/90">
-                          {loading ? "Guardando..." : "Registrar Venta"}
-                        </Button>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setSaleDialogOpen(false)}
+                            className="h-11 rounded-xl flex-1 sm:flex-none"
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={loading || saleTotal <= 0}
+                            className="h-11 rounded-xl bg-primary px-6 text-primary-foreground hover:bg-primary/90 font-bold flex-1 sm:flex-none shadow-sm"
+                          >
+                            {loading ? "Guardando..." : `Registrar Venta (Q${saleTotal.toFixed(2)})`}
+                          </Button>
+                        </div>
                       </div>
                     </form>
                   </DialogContent>
