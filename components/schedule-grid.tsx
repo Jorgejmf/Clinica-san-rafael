@@ -122,52 +122,52 @@ export function ScheduleGrid({
   }) => {
     const c = {
       blue: {
-        border: "border-blue-200",
-        bg: "bg-blue-50/20",
-        titleText: "text-blue-700",
-        iconColor: "text-blue-600",
-        timeBg: "bg-blue-50",
-        timeText: "text-blue-700",
-        timeBorder: "border-blue-200/50",
-        slotBusy: "border-blue-300 bg-blue-100/90 text-blue-900",
-        slotFree: "border-blue-200/60 bg-white hover:border-blue-300",
-        addBorder: "border-blue-300",
-        addText: "text-blue-700",
-        addHover: "hover:bg-blue-600 hover:text-white",
+        border: "border-blue-200 dark:border-blue-900/50",
+        bg: "bg-blue-50/20 dark:bg-blue-950/20",
+        titleText: "text-blue-700 dark:text-blue-300",
+        iconColor: "text-blue-600 dark:text-blue-400",
+        timeBg: "bg-blue-50 dark:bg-blue-950/60",
+        timeText: "text-blue-700 dark:text-blue-300",
+        timeBorder: "border-blue-200/50 dark:border-blue-800/50",
+        slotBusy: "border-blue-300 bg-blue-100/90 text-blue-900 dark:border-blue-800/80 dark:bg-blue-950/60 dark:text-blue-200",
+        slotFree: "border-blue-200/60 bg-card dark:bg-card/90 dark:border-blue-900/40 hover:border-blue-300 dark:hover:border-blue-700",
+        addBorder: "border-blue-300 dark:border-blue-800",
+        addText: "text-blue-700 dark:text-blue-300",
+        addHover: "hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white",
         badgeBg: "bg-blue-600",
-        innerBorder: "border-blue-200",
-        innerBg: "bg-white/80",
-        innerText: "text-blue-950",
+        innerBorder: "border-blue-200 dark:border-blue-900/50",
+        innerBg: "bg-background/80 dark:bg-card/80",
+        innerText: "text-blue-950 dark:text-blue-100",
         innerDetail: "text-muted-foreground",
-        sepBorder: "border-blue-200/60",
-        userIcon: "text-blue-600",
-        userText: "text-blue-800",
-        bookBtn: "border-blue-400 text-blue-700 hover:bg-blue-600 hover:text-white",
-        inputBorder: "border-blue-300",
+        sepBorder: "border-blue-200/60 dark:border-blue-900/40",
+        userIcon: "text-blue-600 dark:text-blue-400",
+        userText: "text-blue-800 dark:text-blue-300",
+        bookBtn: "border-blue-400 text-blue-700 hover:bg-blue-600 hover:text-white dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-600 dark:hover:text-white",
+        inputBorder: "border-blue-300 dark:border-blue-800 bg-background dark:bg-card dark:text-foreground",
       },
       pink: {
-        border: "border-pink-200",
-        bg: "bg-pink-50/20",
-        titleText: "text-pink-700",
-        iconColor: "text-pink-600",
-        timeBg: "bg-pink-50",
-        timeText: "text-pink-700",
-        timeBorder: "border-pink-200/50",
-        slotBusy: "border-pink-300 bg-pink-100/90 text-pink-900",
-        slotFree: "border-pink-200/60 bg-white hover:border-pink-300",
-        addBorder: "border-pink-300",
-        addText: "text-pink-700",
-        addHover: "hover:bg-pink-600 hover:text-white",
+        border: "border-pink-200 dark:border-pink-900/50",
+        bg: "bg-pink-50/20 dark:bg-pink-950/20",
+        titleText: "text-pink-700 dark:text-pink-300",
+        iconColor: "text-pink-600 dark:text-pink-400",
+        timeBg: "bg-pink-50 dark:bg-pink-950/60",
+        timeText: "text-pink-700 dark:text-pink-300",
+        timeBorder: "border-pink-200/50 dark:border-pink-800/50",
+        slotBusy: "border-pink-300 bg-pink-100/90 text-pink-900 dark:border-pink-800/80 dark:bg-pink-950/60 dark:text-pink-200",
+        slotFree: "border-pink-200/60 bg-card dark:bg-card/90 dark:border-pink-900/40 hover:border-pink-300 dark:hover:border-pink-700",
+        addBorder: "border-pink-300 dark:border-pink-800",
+        addText: "text-pink-700 dark:text-pink-300",
+        addHover: "hover:bg-pink-600 hover:text-white dark:hover:bg-pink-600 dark:hover:text-white",
         badgeBg: "bg-pink-600",
-        innerBorder: "border-pink-200",
-        innerBg: "bg-white/80",
-        innerText: "text-pink-950",
+        innerBorder: "border-pink-200 dark:border-pink-900/50",
+        innerBg: "bg-background/80 dark:bg-card/80",
+        innerText: "text-pink-950 dark:text-pink-100",
         innerDetail: "text-muted-foreground",
-        sepBorder: "border-pink-200/60",
-        userIcon: "text-pink-600",
-        userText: "text-pink-800",
-        bookBtn: "border-pink-400 text-pink-700 hover:bg-pink-600 hover:text-white",
-        inputBorder: "border-pink-300",
+        sepBorder: "border-pink-200/60 dark:border-pink-900/40",
+        userIcon: "text-pink-600 dark:text-pink-400",
+        userText: "text-pink-800 dark:text-pink-300",
+        bookBtn: "border-pink-400 text-pink-700 hover:bg-pink-600 hover:text-white dark:border-pink-700 dark:text-pink-300 dark:hover:bg-pink-600 dark:hover:text-white",
+        inputBorder: "border-pink-300 dark:border-pink-800 bg-background dark:bg-card dark:text-foreground",
       },
     }[color]
 
@@ -176,27 +176,27 @@ export function ScheduleGrid({
     const title = col === "doctor" ? "Dr. Médico" : "Dra. Médica"
 
     return (
-      <div className={`space-y-3 rounded-xl border ${c.border} ${c.bg} p-4`}>
+      <div className={`space-y-3 rounded-2xl border ${c.border} ${c.bg} p-4 transition-all duration-300`}>
         {/* Header */}
-        <div className={`flex items-center justify-between border-b ${c.border} pb-2`}>
+        <div className={`flex items-center justify-between border-b ${c.border} pb-3`}>
           <div className={`flex items-center gap-2 ${c.titleText} font-bold text-sm`}>
             <Stethoscope className={`h-4 w-4 ${c.iconColor}`} />
             <span>{title}</span>
           </div>
           {/* Add lapso */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <Input
               type="time"
               value={newTime}
               onChange={(e) => setNewTime(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addHour(col)}
-              className={`h-7 w-24 text-xs rounded-lg bg-white ${c.inputBorder}`}
+              className={`h-7 w-24 text-xs rounded-lg ${c.inputBorder}`}
             />
             <Button
               size="sm"
               variant="outline"
               onClick={() => addHour(col)}
-              className={`h-7 text-xs rounded-lg ${c.addBorder} ${c.addText} bg-white ${c.addHover} px-2`}
+              className={`h-7 text-xs rounded-lg ${c.addBorder} ${c.addText} bg-background dark:bg-card ${c.addHover} px-2.5 font-semibold transition-colors duration-200`}
             >
               <Plus className="h-3 w-3 mr-0.5" /> Lapso
             </Button>
@@ -213,7 +213,7 @@ export function ScheduleGrid({
             return (
               <div
                 key={`${col}-${time}`}
-                className={`flex flex-col gap-2 rounded-xl border p-3 transition-all text-xs ${
+                className={`card-hover-lift flex flex-col gap-2 rounded-xl border p-3 transition-all duration-200 text-xs ${
                   count > 0 ? c.slotBusy : c.slotFree
                 }`}
               >
@@ -235,7 +235,7 @@ export function ScheduleGrid({
                         type="button"
                         title="Clic para editar hora"
                         onClick={() => setEditSlot({ col, idx, val: time })}
-                        className={`font-mono font-bold text-xs ${c.timeText} ${c.timeBg} px-2 py-1 rounded-md border ${c.timeBorder} hover:opacity-80`}
+                        className={`font-mono font-bold text-xs ${c.timeText} ${c.timeBg} px-2 py-1 rounded-md border ${c.timeBorder} hover:opacity-80 transition-opacity`}
                       >
                         {time} hrs ✏️
                       </button>
@@ -247,7 +247,7 @@ export function ScheduleGrid({
                         {count} paciente{count !== 1 ? "s" : ""}
                       </span>
                     ) : (
-                      <span className="text-emerald-600 font-medium">Disponible</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Disponible</span>
                     )}
                   </div>
 
@@ -256,7 +256,7 @@ export function ScheduleGrid({
                       size="sm"
                       variant="outline"
                       onClick={() => onBookSlot(selectedDate, time, doctorId)}
-                      className={`h-7 text-xs rounded-lg bg-white ${c.bookBtn} font-semibold`}
+                      className={`h-7 text-xs rounded-lg bg-background dark:bg-card ${c.bookBtn} font-semibold transition-all duration-200`}
                     >
                       <Plus className="mr-1 h-3 w-3" />
                       Agendar
@@ -265,20 +265,20 @@ export function ScheduleGrid({
                       type="button"
                       title="Eliminar lapso de la grilla"
                       onClick={() => removeHour(col, time)}
-                      className="text-muted-foreground/50 hover:text-destructive p-1"
+                      className="text-muted-foreground/60 hover:text-destructive p-1 rounded-md transition-colors"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Patient list in this slot with real deletion (Requerimiento 3) */}
+                {/* Patient list in this slot with real deletion */}
                 {count > 0 && (
                   <div className={`space-y-1.5 pt-1 border-t ${c.sepBorder}`}>
                     {apps.map((app) => (
                       <div
                         key={app.id}
-                        className={`flex items-center justify-between ${c.innerBg} p-2 rounded-lg border ${c.innerBorder}`}
+                        className={`flex items-center justify-between ${c.innerBg} p-2 rounded-lg border ${c.innerBorder} transition-all duration-200`}
                       >
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -306,11 +306,11 @@ export function ScheduleGrid({
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Badge className={`${c.badgeBg} text-white text-[9px] uppercase px-1.5 py-0.5`}>
+                          <Badge className={`${c.badgeBg} text-white text-[9px] uppercase px-1.5 py-0.5 shadow-none`}>
                             {app.status}
                           </Badge>
 
-                          {/* Botón de eliminación real de la cita (Requerimiento 3) */}
+                          {/* Botón de eliminación de la cita */}
                           <button
                             type="button"
                             title="Eliminar cita de este paciente y liberar horario"
@@ -346,9 +346,9 @@ export function ScheduleGrid({
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <div className="animate-fade-in-up space-y-4 rounded-2xl border border-border/80 bg-card/95 backdrop-blur-xl p-5 shadow-sm transition-all duration-300">
       {/* Date Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/70 pb-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Clock className="h-5 w-5" />
@@ -361,8 +361,8 @@ export function ScheduleGrid({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => changeDate(-1)} className="h-9 w-9 rounded-xl">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="icon" onClick={() => changeDate(-1)} className="h-9 w-9 rounded-xl hover:scale-105 transition-transform">
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2 rounded-xl border border-border px-3 py-1.5 bg-muted/20">
@@ -371,17 +371,17 @@ export function ScheduleGrid({
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="h-7 border-none bg-transparent p-0 text-sm font-semibold focus-visible:ring-0"
+              className="h-7 border-none bg-transparent p-0 text-sm font-semibold focus-visible:ring-0 text-foreground"
             />
           </div>
-          <Button variant="outline" size="icon" onClick={() => changeDate(1)} className="h-9 w-9 rounded-xl">
+          <Button variant="outline" size="icon" onClick={() => changeDate(1)} className="h-9 w-9 rounded-xl hover:scale-105 transition-transform">
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setSelectedDate(getTodayGT())}
-            className="h-9 text-xs rounded-xl"
+            className="h-9 text-xs rounded-xl font-semibold hover:bg-muted/40"
           >
             Hoy ({formatDateGT(getTodayGT())})
           </Button>

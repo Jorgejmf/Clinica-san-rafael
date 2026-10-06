@@ -142,7 +142,7 @@ export function PatientsTable({
   }, [filtered, safeCurrentPage, pageSize])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in-up">
       {/* Search & filters */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative flex-1">
@@ -151,7 +151,7 @@ export function PatientsTable({
             placeholder="Buscar por nombre, teléfono normalizado (ej: 5222-0371), expediente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-11 rounded-xl pl-10 text-sm"
+            className="h-11 rounded-xl pl-10 text-sm transition-all duration-200 focus:shadow-md focus:shadow-primary/10"
           />
         </div>
 
@@ -196,7 +196,7 @@ export function PatientsTable({
           </Select>
 
           <Link href="/pacientes/nuevo">
-            <Button className="h-11 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm">
+            <Button className="h-11 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
               + Agregar Paciente
             </Button>
           </Link>
@@ -204,7 +204,7 @@ export function PatientsTable({
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/95 backdrop-blur-xl shadow-sm transition-all duration-300">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -222,17 +222,17 @@ export function PatientsTable({
               {paginatedPatients.map((p) => {
                 const age = calculateAge(p)
                 let catLabel = "Adulto"
-                let catBadgeClass = "bg-blue-100 text-blue-700"
+                let catBadgeClass = "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800"
 
                 if (age <= 11) {
                   catLabel = "Niño"
-                  catBadgeClass = "bg-amber-100 text-amber-700"
+                  catBadgeClass = "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
                 } else if (age <= 17) {
                   catLabel = "Adolescente"
-                  catBadgeClass = "bg-purple-100 text-purple-700"
+                  catBadgeClass = "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800"
                 } else if (age >= 60) {
                   catLabel = "Adulto Mayor"
-                  catBadgeClass = "bg-emerald-100 text-emerald-700"
+                  catBadgeClass = "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
                 }
 
                 const statusVal = p.status || p.estado || "Activo"
@@ -240,7 +240,7 @@ export function PatientsTable({
                 return (
                   <tr
                     key={p.id}
-                    className="transition-colors hover:bg-muted/30"
+                    className="transition-colors duration-150 hover:bg-muted/30 group"
                   >
                     <td className="px-5 py-3.5 font-mono text-xs font-bold text-primary">
                       #{p.no_expediente || p.id.substring(0, 8).toUpperCase()}
@@ -251,7 +251,7 @@ export function PatientsTable({
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-card-foreground">{age} años</span>
-                        <Badge className={`text-[10px] py-0 h-4 font-bold ${catBadgeClass}`}>
+                        <Badge className={`text-[10px] py-0 h-4 font-bold border ${catBadgeClass}`}>
                           {catLabel}
                         </Badge>
                       </div>
@@ -271,9 +271,9 @@ export function PatientsTable({
                     </td>
                     <td className="px-5 py-3.5 text-center">
                       <Badge
-                        className={`text-[10px] font-bold uppercase ${
+                        className={`text-[10px] font-bold uppercase shadow-none ${
                           statusVal === "Activo"
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
                             : "bg-muted text-muted-foreground border-border"
                         }`}
                       >
@@ -286,7 +286,7 @@ export function PatientsTable({
                           <Button
                             type="button"
                             size="sm"
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg text-xs h-8 px-3"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg text-xs h-8 px-3 transition-all duration-200 hover:scale-105"
                           >
                             Expediente
                           </Button>
@@ -296,7 +296,7 @@ export function PatientsTable({
                             variant="ghost"
                             size="icon"
                             onClick={() => handleDeletePatient(p.id, `${p.first_name} ${p.last_name}`)}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10 transition-colors"
                             title="Eliminar paciente"
                           >
                             <Trash2 className="h-4 w-4" />

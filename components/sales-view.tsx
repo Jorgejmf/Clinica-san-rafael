@@ -428,20 +428,20 @@ export function SalesView({
     : `${monthNames[month]} ${year}`
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="stagger-children grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Ingresos */}
-        <div className="rounded-2xl border theme-income-card p-4 shadow-sm">
+        <div className="card-hover-lift rounded-2xl border theme-income-card p-4 shadow-sm transition-all duration-300">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl theme-income-icon">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl theme-income-icon shadow-xs">
               <TrendingUp className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium theme-income-label">
+              <p className="text-xs font-semibold theme-income-label">
                 Total Ingresos ({activePeriodLabel})
               </p>
-              <p className="text-xl font-bold theme-income-amount">
+              <p className="text-2xl font-black theme-income-amount">
                 Q{totalIncome.toLocaleString("es-GT", { minimumFractionDigits: 2 })}
               </p>
             </div>
@@ -449,16 +449,16 @@ export function SalesView({
         </div>
 
         {/* Total Gastos */}
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
+        <div className="card-hover-lift rounded-2xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 p-4 shadow-sm transition-all duration-300">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-100 text-red-700">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400">
               <TrendingDown className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-red-600">
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400">
                 Total Gastos ({activePeriodLabel})
               </p>
-              <p className="text-xl font-bold text-red-800">
+              <p className="text-2xl font-black text-red-800 dark:text-red-200">
                 Q{totalExpenses.toLocaleString("es-GT", { minimumFractionDigits: 2 })}
               </p>
             </div>
@@ -466,16 +466,16 @@ export function SalesView({
         </div>
 
         {/* Balance */}
-        <div className={`rounded-2xl border p-4 shadow-sm ${balance >= 0 ? "border-blue-200 bg-blue-50" : "border-orange-200 bg-orange-50"}`}>
+        <div className={`card-hover-lift rounded-2xl border p-4 shadow-sm transition-all duration-300 ${balance >= 0 ? "border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20" : "border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-950/20"}`}>
           <div className="flex items-center gap-3">
-            <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${balance >= 0 ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
+            <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${balance >= 0 ? "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400" : "bg-orange-100 dark:bg-orange-950/60 text-orange-700 dark:text-orange-400"}`}>
               <DollarSign className="h-5 w-5" />
             </div>
             <div>
-              <p className={`text-xs font-medium ${balance >= 0 ? "text-blue-600" : "text-orange-600"}`}>
+              <p className={`text-xs font-semibold ${balance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>
                 Balance General ({activePeriodLabel})
               </p>
-              <p className={`text-xl font-bold ${balance >= 0 ? "text-blue-800" : "text-orange-800"}`}>
+              <p className={`text-2xl font-black ${balance >= 0 ? "text-blue-800 dark:text-blue-200" : "text-orange-800 dark:text-orange-200"}`}>
                 {balance < 0 ? "-" : ""}Q{Math.abs(balance).toLocaleString("es-GT", { minimumFractionDigits: 2 })}
               </p>
             </div>
@@ -925,16 +925,16 @@ export function SalesView({
                     let rowClass = "hover:bg-muted/30"
                     let badgeClass = "theme-income-badge"
                     let doctorBadge = "General / Sin Dr."
-                    let doctorStyle = "bg-gray-100 text-gray-700"
+                    let doctorStyle = "bg-muted text-muted-foreground border-border"
 
                     if (isDoctor) {
-                      rowClass = "bg-blue-50/40 hover:bg-blue-50/70"
+                      rowClass = "bg-blue-50/40 hover:bg-blue-50/70 dark:bg-blue-950/20 dark:hover:bg-blue-950/40"
                       doctorBadge = "Dr. Médico"
-                      doctorStyle = "bg-blue-100 text-blue-700 border-blue-200"
+                      doctorStyle = "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800"
                     } else if (isDoctora) {
-                      rowClass = "bg-pink-50/40 hover:bg-pink-50/70"
+                      rowClass = "bg-pink-50/40 hover:bg-pink-50/70 dark:bg-pink-950/20 dark:hover:bg-pink-950/40"
                       doctorBadge = "Dra. Médica"
-                      doctorStyle = "bg-pink-100 text-pink-700 border-pink-200"
+                      doctorStyle = "bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800"
                     }
 
                     return (
@@ -948,7 +948,7 @@ export function SalesView({
                               Ingreso
                             </Badge>
                           ) : (
-                            <Badge className="bg-red-100 text-red-700 border border-red-200">
+                            <Badge className="bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800">
                               Gasto
                             </Badge>
                           )}

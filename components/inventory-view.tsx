@@ -122,32 +122,32 @@ export function InventoryView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in-up">
       {/* Summary + add */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-3">
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div className="stagger-children flex gap-3 flex-wrap">
+          <div className="card-hover-lift rounded-2xl border border-border/80 bg-card/95 backdrop-blur-xl p-4 shadow-sm transition-all duration-300">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
                 <Package className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Productos</p>
-                <p className="text-xl font-bold text-card-foreground">
+                <p className="text-xs font-medium text-muted-foreground">Total Productos</p>
+                <p className="text-2xl font-black text-card-foreground">
                   {inventory.length}
                 </p>
               </div>
             </div>
           </div>
           {lowStockCount > 0 && (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 shadow-sm">
+            <div className="card-hover-lift rounded-2xl border border-destructive/30 bg-destructive/5 dark:bg-destructive/10 p-4 shadow-sm transition-all duration-300">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive shadow-xs">
                   <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Stock Bajo</p>
-                  <p className="text-xl font-bold text-card-foreground">
+                  <p className="text-xs font-medium text-destructive">Stock Bajo</p>
+                  <p className="text-2xl font-black text-destructive">
                     {lowStockCount}
                   </p>
                 </div>
@@ -159,7 +159,7 @@ export function InventoryView({
         {!readOnly && (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="h-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button className="h-11 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-primary/90 shadow-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
               <Plus className="mr-2 h-4 w-4" />
               Agregar Producto
             </Button>
@@ -222,7 +222,7 @@ export function InventoryView({
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="h-11 rounded-xl bg-primary px-6 text-primary-foreground hover:bg-primary/90"
+                  className="h-11 rounded-xl bg-primary px-6 text-primary-foreground font-bold hover:bg-primary/90 transition-all duration-200"
                 >
                   {loading ? "Guardando..." : "Agregar Producto"}
                 </Button>
@@ -240,12 +240,12 @@ export function InventoryView({
           placeholder="Buscar producto..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 h-11 rounded-xl bg-card border-border focus-visible:ring-primary text-base"
+          className="pl-10 h-11 rounded-xl bg-card border-border focus-visible:ring-primary text-base transition-all duration-200 focus:shadow-md focus:shadow-primary/10"
         />
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/95 backdrop-blur-xl shadow-sm transition-all duration-300">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

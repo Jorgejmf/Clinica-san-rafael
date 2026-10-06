@@ -48,10 +48,10 @@ import { ScheduleGrid } from "./schedule-grid"
 import { getTodayGT, formatDateGT, formatTimeGT, formatDateTimeGT, isTodayGT } from "@/lib/date-utils"
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 border-amber-300",
-  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  completed: "bg-blue-100 text-blue-800 border-blue-300",
-  cancelled: "bg-red-100 text-red-800 border-red-300",
+  pending: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+  completed: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+  cancelled: "bg-red-100 text-red-800 border-red-300 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -828,11 +828,11 @@ export function AppointmentsView({
         )}
 
         {/* Doctor tab */}
-        <TabsContent value="doctor" className="mt-4">
+        <TabsContent value="doctor" className="mt-4 animate-fade-in-up">
           {isDoctor && (
-            <div className="mb-3 flex items-center gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-2.5">
-              <UserCheck className="h-4 w-4 text-blue-600" />
-              <span className="text-sm text-blue-700 font-medium">
+            <div className="mb-3 flex items-center gap-2 rounded-xl bg-blue-50 border border-blue-100 dark:bg-blue-950/40 dark:border-blue-900/60 px-4 py-2.5">
+              <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
                 Citas del Dr. Médico hoy — Presiona &quot;Confirmar Cita&quot; para confirmar asistencia o haz clic para abrir la ficha clínica.
               </span>
             </div>
@@ -854,11 +854,11 @@ export function AppointmentsView({
         </TabsContent>
 
         {/* Doctora tab */}
-        <TabsContent value="doctora" className="mt-4">
+        <TabsContent value="doctora" className="mt-4 animate-fade-in-up">
           {isDoctor && (
-            <div className="mb-3 flex items-center gap-2 rounded-xl bg-pink-50 border border-pink-100 px-4 py-2.5">
-              <UserCheck className="h-4 w-4 text-pink-600" />
-              <span className="text-sm text-pink-700 font-medium">
+            <div className="mb-3 flex items-center gap-2 rounded-xl bg-pink-50 border border-pink-100 dark:bg-pink-950/40 dark:border-pink-900/60 px-4 py-2.5">
+              <UserCheck className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+              <span className="text-sm text-pink-700 dark:text-pink-300 font-medium">
                 Citas de la Dra. Médica hoy — Presiona &quot;Confirmar Cita&quot; para confirmar asistencia o &quot;Atendido&quot; para finalizar la cita.
               </span>
             </div>
@@ -1083,12 +1083,12 @@ function AppointmentList({
   showDoctorBadge?: boolean
 }) {
   const colorMap = {
-    blue: "bg-blue-50 text-blue-600",
-    pink: "bg-pink-50 text-pink-600",
+    blue: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400",
+    pink: "bg-pink-50 text-pink-600 dark:bg-pink-950/60 dark:text-pink-400",
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 stagger-children">
       {appointments.map((a) => {
         const isClickable = isDoctor && a.status !== "completed" && a.status !== "cancelled"
         const patientFullName = a.patients
@@ -1099,7 +1099,7 @@ function AppointmentList({
           <div
             key={a.id}
             onClick={() => isClickable && onSelect(a)}
-            className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-center sm:justify-between ${isClickable ? "cursor-pointer hover:border-primary" : ""}`}
+            className={`card-hover-lift flex flex-col gap-3 rounded-2xl border border-border/80 bg-card/95 backdrop-blur-xl p-4 shadow-sm transition-all duration-300 hover:shadow-md sm:flex-row sm:items-center sm:justify-between ${isClickable ? "cursor-pointer hover:border-primary/50" : ""}`}
           >
             <div className="flex items-start gap-3">
               <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${colorMap[doctorColor]}`}>
@@ -1110,7 +1110,7 @@ function AppointmentList({
                   {patientFullName}
                 </p>
                 <p className="text-xs text-muted-foreground">{a.reason || "Consulta médica"}</p>
-                <div className="mt-1 flex items-center gap-3">
+                <div className="mt-1 flex items-center gap-3 flex-wrap">
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <CalendarDays className="h-3 w-3" />
                     {formatDateGT(a.scheduled_at)}
@@ -1120,7 +1120,7 @@ function AppointmentList({
                     {formatTimeGT(a.scheduled_at)} hrs
                   </span>
                   {showDoctorBadge && (
-                    <Badge variant="outline" className={`text-[10px] py-0 h-4 ${a.doctor_id === DOCTOR_ID ? 'text-blue-600 border-blue-200 bg-blue-50' : 'text-pink-600 border-pink-200 bg-pink-50'}`}>
+                    <Badge variant="outline" className={`text-[10px] py-0 h-4 ${a.doctor_id === DOCTOR_ID ? 'text-blue-600 border-blue-200 bg-blue-50 dark:text-blue-400 dark:border-blue-900/60 dark:bg-blue-950/40' : 'text-pink-600 border-pink-200 bg-pink-50 dark:text-pink-400 dark:border-pink-900/60 dark:bg-pink-950/40'}`}>
                       {a.doctor_id === DOCTOR_ID ? "Dr. Médico" : "Dra. Médica"}
                     </Badge>
                   )}
