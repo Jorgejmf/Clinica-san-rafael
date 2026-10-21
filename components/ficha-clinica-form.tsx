@@ -59,15 +59,26 @@ export function FichaClinicaForm({
   // Parse any encoded fields if editing or pre-filled
   const parsedRecord = initialRecord ? parseClinicalRecord(initialRecord) : null
 
-  // Calculate age at consultation date (kept as historical age)
-  const defaultAge = (() => {
-    if (parsedRecord && parsedRecord.age_at_visit !== undefined && parsedRecord.age_at_visit !== null) {
-      return String(parsedRecord.age_at_visit)
+  // Fecha de la consulta (permite modificar tanto en nueva ficha como al editar)
+  const defaultFechaConsulta = (() => {
+    const rawDate = initialRecord?.created_at || parsedRecord?.created_at
+    if (rawDate) {
+      if (/^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+        return rawDate.substring(0, 10)
+      }
+      try {
+        const d = new Date(rawDate)
+        if (!isNaN(d.getTime())) {
+          return new Intl.DateTimeFormat("en-CA", {
+            timeZone: "America/Guatemala",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(d)
+        }
+      } catch {}
     }
-    const calc = calculateAgeAtDate(patient.birth_date, parsedRecord?.created_at || new Date())
-    if (calc !== null) return String(calc)
-    if (patient.age !== undefined && patient.age !== null) return String(patient.age)
-    return ""
+    return getTodayGT()
   })()
 
   // Leer borrador guardado en localStorage para nueva consulta sin perder datos
@@ -85,6 +96,28 @@ export function FichaClinicaForm({
       }
     } catch {}
     return fallback
+  }
+
+  const [fechaConsulta, setFechaConsulta] = useState(() => getInitialValue("fechaConsulta", defaultFechaConsulta))
+
+  // Calculate age at consultation date (kept as historical age)
+  const defaultAge = (() => {
+    if (parsedRecord && parsedRecord.age_at_visit !== undefined && parsedRecord.age_at_visit !== null) {
+      return String(parsedRecord.age_at_visit)
+    }
+    const calc = calculateAgeAtDate(patient.birth_date, fechaConsulta || defaultFechaConsulta)
+    if (calc !== null) return String(calc)
+    if (patient.age !== undefined && patient.age !== null) return String(patient.age)
+    return ""
+  })()
+
+  // Manejar cambio de fecha con actualización de edad
+  const handleFechaConsultaChange = (newDate: string) => {
+    setFechaConsulta(newDate)
+    const calc = calculateAgeAtDate(patient.birth_date, newDate)
+    if (calc !== null) {
+      setEdad(String(calc))
+    }
   }
 
   // Vitals — all editable text fields con recuperación de borrador
@@ -132,10 +165,20 @@ export function FichaClinicaForm({
       const cleanProximaCita = String(proximaCita ?? "").trim()
       const parsedProximaCita = cleanProximaCita !== "" ? cleanProximaCita : null
 
+      // Construir timestamp con la fecha elegida por el usuario
+      let recordCreatedAt: string
+      try {
+        const currentTime = new Date().toTimeString().split(" ")[0] || "12:00:00"
+        recordCreatedAt = `${fechaConsulta}T${currentTime}`
+      } catch {
+        recordCreatedAt = new Date().toISOString()
+      }
+
       // Payload sanitizado: vacíos convertidos en null y tipos limpios
       const payload: Record<string, any> = {
         patient_id: patient.id,
         doctor_id: doctorId,
+        created_at: recordCreatedAt,
         symptoms: String(motivoConsulta ?? "").trim() || null,
         motivo_consulta: String(motivoConsulta ?? "").trim() || null,
         diagnosis: String(diagnosis ?? "").trim() || null,
@@ -198,6 +241,7 @@ export function FichaClinicaForm({
   useEffect(() => {
     if (isEditing || typeof window === "undefined") return
     const data = {
+      fechaConsulta,
       edad,
       respiracion,
       temperatura,
@@ -231,6 +275,7 @@ export function FichaClinicaForm({
     conductaASeguir,
     proximaCita,
     labs,
+    fechaConsulta,
   ])
 
   // Advertir al usuario antes de salir si tiene cambios sin guardar
@@ -303,9 +348,7 @@ export function FichaClinicaForm({
     window.print()
   }
 
-  const consultationDateDisplay = isEditing && initialRecord?.created_at
-    ? formatDateGT(initialRecord.created_at)
-    : formatDateGT(getTodayGT())
+  const consultationDateDisplay = formatDateGT(fechaConsulta)
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-card border border-primary p-6 shadow-sm print:p-0 print:border-none">
@@ -339,10 +382,20 @@ export function FichaClinicaForm({
               {ppDone ? "✓ PP Pendiente Agregado" : ppLoading ? "Agregando..." : "PP"}
             </button>
           )}
-          <div className="flex items-center gap-2 border border-primary px-3 py-1">
-            <span className="text-primary text-sm font-semibold uppercase">Fecha:</span>
-            <span className="text-card-foreground font-medium text-sm w-32 text-center">
-              {consultationDateDisplay}
+          <div className="flex items-center gap-2 border border-primary px-3 py-1 rounded-md bg-card">
+            <label htmlFor="fecha-consulta-input" className="text-primary text-sm font-semibold uppercase cursor-pointer">
+              Fecha:
+            </label>
+            <input
+              id="fecha-consulta-input"
+              type="date"
+              value={fechaConsulta}
+              onChange={(e) => handleFechaConsultaChange(e.target.value)}
+              className="font-semibold text-sm bg-transparent border border-primary/40 rounded px-2 py-0.5 text-card-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer print:hidden"
+              title="Haz clic para modificar la fecha de la consulta"
+            />
+            <span className="hidden print:inline-block font-semibold text-sm text-card-foreground">
+              {formatDateGT(fechaConsulta)}
             </span>
           </div>
         </div>
