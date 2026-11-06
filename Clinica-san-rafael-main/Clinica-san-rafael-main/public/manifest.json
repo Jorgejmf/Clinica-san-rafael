@@ -1,0 +1,9 @@
+{
+  "name": "Clinica San Rafael",
+  "short_name": "San Rafael",
+  "description": "Sistema de gestion para la Clinica San Rafael",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafdf6",
+  "theme_color": "#84cc16"
+}
